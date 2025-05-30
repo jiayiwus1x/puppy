@@ -46,6 +46,9 @@ function App() {
   const [timer, setTimer] = useState('');
   const [lastLevel, setLastLevel] = useState(1);
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const [showSkillAnim, setShowSkillAnim] = useState(false);
+  const [lastSkill, setLastSkill] = useState(null);
+  const [skillAnimType, setSkillAnimType] = useState('');
 
   // Helper to pick puppy face
   const getPuppyFace = () => {
@@ -54,6 +57,23 @@ function App() {
     if (puppy.hunger > 70) return '🥺';
     if (puppy.happiness < 30) return '😐';
     return '';
+  };
+
+  // Helper to pick puppy emoji based on level
+  const getPuppyEmoji = () => {
+    if (!puppy) return '🐶';
+    if (puppy.level >= 4) return '🐕‍🦺';
+    if (puppy.level >= 2) return '🦮';
+    return '🐶';
+  };
+
+  // Helper to pick mood color and label
+  const getMood = () => {
+    if (!puppy) return { color: '#aaa', label: 'Unknown' };
+    if (puppy.happiness > 80) return { color: '#4caf50', label: 'Satisfied' };
+    if (puppy.happiness > 50) return { color: '#ffe066', label: 'Okay' };
+    if (puppy.happiness > 30) return { color: '#ff9800', label: 'Unhappy' };
+    return { color: '#f44336', label: 'Sad' };
   };
 
   // Fetch puppy state from backend
@@ -88,6 +108,25 @@ function App() {
       setTimeout(() => setShowLevelUp(false), 2000);
     }
     setLastLevel(puppy.level);
+  }, [puppy]);
+
+  // Watch for new skill learned
+  useEffect(() => {
+    if (!puppy || !puppy.skills) return;
+    if (lastSkill === null) {
+      setLastSkill(puppy.skills[puppy.skills.length - 1]);
+      return;
+    }
+    if (puppy.skills.length > 0 && puppy.skills[puppy.skills.length - 1] !== lastSkill) {
+      const newSkill = puppy.skills[puppy.skills.length - 1];
+      setLastSkill(newSkill);
+      setShowSkillAnim(true);
+      // Choose animation type
+      if (newSkill.toLowerCase().includes('spin')) setSkillAnimType('spin');
+      else if (newSkill.toLowerCase().includes('jump')) setSkillAnimType('jump');
+      else setSkillAnimType('bounce');
+      setTimeout(() => setShowSkillAnim(false), 2000);
+    }
   }, [puppy]);
 
   // Send action to backend
@@ -136,9 +175,20 @@ function App() {
       <div className="puppy-card">
         <header className="App-header">
           <h1>🐶 Raise Your LLM Puppy!</h1>
-          <div className={`puppy-emoji-container ${animate ? 'bounce' : ''}`} style={{ fontSize: '5rem', transition: 'all 0.2s' }}>
-            <span className="puppy-emoji-base">🐶</span>
-            {getPuppyFace() && <span className="puppy-emoji-face">{getPuppyFace()}</span>}
+          <div className="puppy-emoji-mood-row">
+            <div className={`puppy-emoji-container ${animate ? 'bounce' : ''} ${showSkillAnim ? skillAnimType : ''}`} style={{ fontSize: '5rem', transition: 'all 0.2s' }}>
+              {showSkillAnim && lastSkill && (
+                <div className="puppy-skill-anim">{lastSkill}!</div>
+              )}
+              <span className="puppy-emoji-base">{getPuppyEmoji()}</span>
+            </div>
+            <div className="puppy-mood-bar">
+              <div className="puppy-mood-label">{getMood().label}</div>
+              <div className="puppy-mood-outer">
+                <div className="puppy-mood-inner" style={{ width: `${puppy.happiness}%`, background: getMood().color }} />
+              </div>
+              <div className="puppy-mood-value">{puppy.happiness} / 100</div>
+            </div>
           </div>
           <div className="puppy-level">Level {puppy.level}</div>
           {showLevelUp && <div className="puppy-levelup">🎉 Level Up! 🎉</div>}

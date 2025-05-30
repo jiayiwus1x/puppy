@@ -1,5 +1,8 @@
 .App {
   text-align: center;
+  background: #181c24;
+  min-height: 100vh;
+  padding: 0;
 }
 
 .App-logo {
@@ -14,14 +17,15 @@
 }
 
 .App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+  background: none;
+  min-height: unset;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  justify-content: flex-start;
+  font-size: 1.1rem;
+  color: #f5f5f7;
+  width: 100%;
 }
 
 .App-link {
@@ -128,107 +132,117 @@
 }
 
 .puppy-card {
-  background: #fff;
-  color: #222;
-  border-radius: 24px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.10);
+  background: #232733;
+  color: #f5f5f7;
+  border-radius: 28px;
+  box-shadow: 0 6px 32px rgba(0,0,0,0.18);
   padding: 2.5rem 2rem 2rem 2rem;
-  max-width: 420px;
-  margin: 2rem auto;
+  max-width: 480px;
+  margin: 3rem auto 2rem auto;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 .puppy-stats {
-  margin: 1.5rem 0 1rem 0;
+  margin: 2.2rem 0 1.2rem 0;
+  width: 100%;
 }
 .progress-bar-container {
-  margin-bottom: 1rem;
+  margin-bottom: 1.2rem;
+  width: 100%;
 }
 .progress-bar-label {
-  font-size: 1rem;
+  font-size: 1.05rem;
   margin-bottom: 0.2rem;
   text-align: left;
-  color: #555;
+  color: #b3b3b3;
 }
 .progress-bar-outer {
-  background: #e0e0e0;
-  border-radius: 12px;
-  height: 18px;
+  background: #2e3340;
+  border-radius: 14px;
+  height: 22px;
   width: 100%;
   overflow: hidden;
   margin-bottom: 0.2rem;
 }
 .progress-bar-inner {
   height: 100%;
-  border-radius: 12px;
+  border-radius: 14px;
   transition: width 0.4s cubic-bezier(.68,-0.55,.27,1.55);
 }
 .progress-bar-value {
-  font-size: 0.9rem;
-  color: #888;
+  font-size: 1rem;
+  color: #b3b3b3;
   text-align: right;
   margin-bottom: 0.2rem;
 }
 .skills-section {
-  margin-top: 1rem;
+  margin-top: 1.2rem;
 }
 .skills-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.6rem;
   margin-top: 0.3rem;
+  justify-content: center;
 }
 .skill-badge {
-  background: #e0f7fa;
-  color: #00796b;
-  border-radius: 12px;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.95rem;
+  background: #2e3340;
+  color: #80deea;
+  border-radius: 16px;
+  padding: 0.35rem 1.1rem;
+  font-size: 1.05rem;
   font-weight: 500;
   box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  margin-bottom: 0.2rem;
+  border: 1.5px solid #232733;
 }
 .skill-badge.none {
-  background: #f7f7fa;
+  background: #232733;
   color: #aaa;
+  border: 1.5px dashed #444;
 }
 .puppy-actions {
-  margin-top: 1.5rem;
+  margin-top: 2.2rem;
   display: flex;
-  gap: 0.7rem;
+  gap: 1.2rem;
   flex-wrap: wrap;
   justify-content: center;
 }
 .puppy-actions button {
-  font-size: 1.1rem;
-  padding: 0.5rem 1.2rem;
-  border-radius: 10px;
+  font-size: 1.2rem;
+  padding: 0.7rem 2.2rem;
+  border-radius: 12px;
   border: none;
-  background: #61dafb;
-  color: #222;
+  background: #00bcd4;
+  color: #232733;
   font-weight: bold;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s, transform 0.1s;
   margin-bottom: 0.2rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
 }
 .puppy-actions button:hover {
-  background: #21a1f3;
+  background: #0097a7;
   color: #fff;
+  transform: translateY(-2px) scale(1.04);
 }
 
 .puppy-emoji-container {
   width: 5.2rem;
   height: 5.2rem;
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
-  vertical-align: top;
-  flex-shrink: 0;
+  background: #232733;
+  border-radius: 50%;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
 }
 .puppy-emoji-base {
   font-size: 5rem;
   z-index: 1;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
 }
 .puppy-emoji-face {
   font-size: 2.2rem;
@@ -249,9 +263,9 @@
 }
 
 .puppy-level {
-  margin-top: 0.5rem;
+  margin-top: 0.7rem;
   font-size: 1.3rem;
-  color: #ff9800;
+  color: #ffb300;
   font-weight: 700;
   letter-spacing: 1px;
 }
@@ -267,4 +281,86 @@
   20% { transform: scale(1.2); opacity: 1; }
   50% { transform: scale(1); opacity: 1; }
   100% { transform: scale(1); opacity: 0; }
+}
+
+.puppy-emoji-mood-row {
+  display: flex;
+  align-items: center;
+  gap: 2.2rem;
+  margin-bottom: 1.2rem;
+  justify-content: center;
+}
+.puppy-mood-bar {
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+.puppy-mood-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #b3b3b3;
+  margin-bottom: 0.1rem;
+}
+.puppy-mood-outer {
+  width: 140px;
+  height: 20px;
+  background: #2e3340;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 0.1rem;
+}
+.puppy-mood-inner {
+  height: 100%;
+  border-radius: 12px;
+  transition: width 0.4s cubic-bezier(.68,-0.55,.27,1.55), background 0.2s;
+}
+.puppy-mood-value {
+  font-size: 0.95rem;
+  color: #b3b3b3;
+  margin-left: 2px;
+}
+
+.puppy-skill-anim {
+  position: absolute;
+  top: -2.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #232733ee;
+  color: #ffd600;
+  font-size: 1.2rem;
+  font-weight: bold;
+  padding: 0.4rem 1.2rem;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  z-index: 10;
+  animation: skill-pop 0.7s cubic-bezier(.68,-0.55,.27,1.55);
+}
+@keyframes skill-pop {
+  0% { transform: translateX(-50%) scale(0.7); opacity: 0; }
+  40% { transform: translateX(-50%) scale(1.15); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+.puppy-emoji-container.spin .puppy-emoji-base {
+  animation: puppy-spin 1.2s linear;
+}
+@keyframes puppy-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.puppy-emoji-container.jump .puppy-emoji-base {
+  animation: puppy-jump 1.2s cubic-bezier(.68,-0.55,.27,1.55);
+}
+@keyframes puppy-jump {
+  0% { transform: translateY(0); }
+  20% { transform: translateY(-40px); }
+  40% { transform: translateY(-20px); }
+  60% { transform: translateY(-40px); }
+  80% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}
+.puppy-emoji-container.bounce .puppy-emoji-base,
+.puppy-emoji-container.bounce:not(.spin):not(.jump) .puppy-emoji-base {
+  animation: puppy-bounce 0.7s cubic-bezier(.68,-0.55,.27,1.55);
 }
