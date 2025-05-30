@@ -1,0 +1,270 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.puppy-emoji {
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.puppy-emoji.bounce {
+  animation: puppy-bounce 0.7s cubic-bezier(.68,-0.55,.27,1.55);
+}
+
+@keyframes puppy-bounce {
+  0% { transform: translateY(0); }
+  20% { transform: translateY(-30px); }
+  40% { transform: translateY(-15px); }
+  60% { transform: translateY(-30px); }
+  80% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}
+
+.puppy-dialog-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.puppy-dialog {
+  background: #fff;
+  color: #222;
+  border-radius: 16px;
+  padding: 2rem;
+  min-width: 320px;
+  max-width: 90vw;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.2);
+  position: relative;
+}
+.puppy-conversation {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  background: #f7f7fa;
+  border-radius: 8px;
+  padding: 1rem;
+}
+.puppy-message {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 16px;
+  display: inline-block;
+  max-width: 80%;
+  word-break: break-word;
+}
+.puppy-message.user {
+  background: #d1e7ff;
+  align-self: flex-end;
+  margin-left: auto;
+}
+.puppy-message.puppy {
+  background: #ffe6b3;
+  align-self: flex-start;
+  margin-right: auto;
+}
+.puppy-dialog-inputs {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.puppy-dialog input[type="text"] {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+}
+.puppy-dialog button {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: #61dafb;
+  color: #222;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.puppy-dialog button:hover {
+  background: #21a1f3;
+  color: #fff;
+}
+
+.puppy-card {
+  background: #fff;
+  color: #222;
+  border-radius: 24px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.10);
+  padding: 2.5rem 2rem 2rem 2rem;
+  max-width: 420px;
+  margin: 2rem auto;
+  position: relative;
+}
+.puppy-stats {
+  margin: 1.5rem 0 1rem 0;
+}
+.progress-bar-container {
+  margin-bottom: 1rem;
+}
+.progress-bar-label {
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+  text-align: left;
+  color: #555;
+}
+.progress-bar-outer {
+  background: #e0e0e0;
+  border-radius: 12px;
+  height: 18px;
+  width: 100%;
+  overflow: hidden;
+  margin-bottom: 0.2rem;
+}
+.progress-bar-inner {
+  height: 100%;
+  border-radius: 12px;
+  transition: width 0.4s cubic-bezier(.68,-0.55,.27,1.55);
+}
+.progress-bar-value {
+  font-size: 0.9rem;
+  color: #888;
+  text-align: right;
+  margin-bottom: 0.2rem;
+}
+.skills-section {
+  margin-top: 1rem;
+}
+.skills-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+.skill-badge {
+  background: #e0f7fa;
+  color: #00796b;
+  border-radius: 12px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.skill-badge.none {
+  background: #f7f7fa;
+  color: #aaa;
+}
+.puppy-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.puppy-actions button {
+  font-size: 1.1rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 10px;
+  border: none;
+  background: #61dafb;
+  color: #222;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  margin-bottom: 0.2rem;
+}
+.puppy-actions button:hover {
+  background: #21a1f3;
+  color: #fff;
+}
+
+.puppy-emoji-container {
+  width: 5.2rem;
+  height: 5.2rem;
+  display: inline-block;
+  position: relative;
+  vertical-align: top;
+  flex-shrink: 0;
+}
+.puppy-emoji-base {
+  font-size: 5rem;
+  z-index: 1;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.puppy-emoji-face {
+  font-size: 2.2rem;
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.puppy-timer {
+  margin-top: 0.7rem;
+  font-size: 1.1rem;
+  color: #4caf50;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.puppy-level {
+  margin-top: 0.5rem;
+  font-size: 1.3rem;
+  color: #ff9800;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.puppy-levelup {
+  margin-top: 0.3rem;
+  font-size: 1.2rem;
+  color: #ffd600;
+  font-weight: bold;
+  animation: levelup-pop 1.5s cubic-bezier(.68,-0.55,.27,1.55);
+}
+@keyframes levelup-pop {
+  0% { transform: scale(0.7); opacity: 0; }
+  20% { transform: scale(1.2); opacity: 1; }
+  50% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
