@@ -5,6 +5,8 @@ const DOG_TRICKS = [
   'Sit', 'Stay', 'Roll Over', 'Shake Paw', 'Play Dead', 'Fetch', 'Spin', 'Speak', 'High Five', 'Jump', 'Dance', 'Crawl', 'Back Up', 'Bow', 'Wave', 'Balance Treat', 'Heel', 'Find It', 'Ring Bell', 'Open Door'
 ];
 
+const API_URL = process.env.REACT_APP_API_URL || 'https://puppy-backend-bce713c62e5e.herokuapp.com';
+
 function ProgressBar({ label, value, max, color }) {
   return (
     <div className="progress-bar-container">
@@ -50,15 +52,6 @@ function App() {
   const [lastSkill, setLastSkill] = useState(null);
   const [skillAnimType, setSkillAnimType] = useState('');
 
-  // Helper to pick puppy face
-  const getPuppyFace = () => {
-    if (!puppy) return '';
-    if (puppy.happiness > 80) return '😃';
-    if (puppy.hunger > 70) return '🥺';
-    if (puppy.happiness < 30) return '😐';
-    return '';
-  };
-
   // Helper to pick puppy emoji based on level
   const getPuppyEmoji = () => {
     if (!puppy) return '🐶';
@@ -79,9 +72,26 @@ function App() {
   // Fetch puppy state from backend
   const fetchPuppy = async () => {
     setLoading(true);
-    const res = await fetch('http://localhost:5050/api/puppy');
-    const data = await res.json();
-    setPuppy(data);
+    try {
+      const res = await fetch(`${API_URL}/api/puppy`);
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data = await res.json();
+      setPuppy(data);
+    } catch (error) {
+      console.error('Failed to fetch puppy:', error);
+      setPuppy({ 
+        name: 'Error', 
+        happiness: 0, 
+        hunger: 100, 
+        skills: [], 
+        level: 1, 
+        age: 0,
+        dead: true,
+        error: `Failed to connect to backend: ${error.message}` 
+      });
+    }
     setLoading(false);
   };
 
@@ -108,7 +118,7 @@ function App() {
       setTimeout(() => setShowLevelUp(false), 2000);
     }
     setLastLevel(puppy.level);
-  }, [puppy]);
+  }, [puppy, lastLevel]);
 
   // Watch for new skill learned
   useEffect(() => {
@@ -127,7 +137,7 @@ function App() {
       else setSkillAnimType('bounce');
       setTimeout(() => setShowSkillAnim(false), 2000);
     }
-  }, [puppy]);
+  }, [puppy, lastSkill]);
 
   // Send action to backend
   const handleAction = async (action) => {
@@ -137,13 +147,21 @@ function App() {
     }
     setActionLoading(true);
     setAnimate(true);
-    const res = await fetch('http://localhost:5050/api/puppy/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    });
-    const data = await res.json();
-    setPuppy(data);
+    try {
+      const res = await fetch(`${API_URL}/api/puppy/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data = await res.json();
+      setPuppy(data);
+    } catch (error) {
+      console.error('Failed to perform action:', error);
+      alert(`Failed to perform action: ${error.message}`);
+    }
     setActionLoading(false);
     setTimeout(() => setAnimate(false), 700);
   };
@@ -152,23 +170,56 @@ function App() {
   const handleSendMessage = async () => {
     if (!userMessage.trim()) return;
     setTalkLoading(true);
-    const res = await fetch('http://localhost:5050/api/puppy/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'talk', message: userMessage }),
-    });
-    const data = await res.json();
-    setPuppy(data.puppy || data); // fallback for old response
-    setConversation((prev) => [
-      ...prev,
-      { from: 'user', text: userMessage },
-      { from: 'puppy', text: data.reply || 'Woof! 🐾' },
-    ]);
-    setUserMessage('');
+    try {
+      const res = await fetch(`${API_URL}/api/puppy/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'talk', message: userMessage }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data = await res.json();
+      setPuppy(data.puppy || data); // fallback for old response
+      setConversation((prev) => [
+        ...prev,
+        { from: 'user', text: userMessage },
+        { from: 'puppy', text: data.reply || 'Woof! 🐾' },
+      ]);
+      setUserMessage('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setConversation((prev) => [
+        ...prev,
+        { from: 'user', text: userMessage },
+        { from: 'puppy', text: `Sorry, I couldn't understand you right now. Error: ${error.message}` },
+      ]);
+      setUserMessage('');
+    }
     setTalkLoading(false);
   };
 
   if (loading) return <div className="App">Loading puppy...</div>;
+
+  if (puppy?.error) {
+    return (
+      <div className="App">
+        <div className="puppy-card">
+          <header className="App-header">
+            <h1>🐶 Raise Your LLM Puppy!</h1>
+            <div style={{ color: 'red', padding: '20px', textAlign: 'center' }}>
+              <h2>❌ Connection Error</h2>
+              <p>{puppy.error}</p>
+              <p>API URL: {API_URL}</p>
+              <button onClick={fetchPuppy} style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px' }}>
+                🔄 Retry Connection
+              </button>
+            </div>
+          </header>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="App">
