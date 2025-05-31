@@ -64,7 +64,7 @@ const HIDDEN_SKILLS = [
 // Helper to calculate age in days
 function getPuppyAge() {
   const now = Date.now();
-  const msPerDay = 1000 * 60 * 60 * 24;
+  const msPerDay = 1000 * 60; // 1 minute = 1 day (much faster aging!)
   return ((now - puppy.birthTime) / msPerDay).toFixed(1); // 1 decimal place
 }
 
