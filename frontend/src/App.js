@@ -54,6 +54,19 @@ function App() {
   const [skillAnimType, setSkillAnimType] = useState('');
   const [showHiddenSkillNotif, setShowHiddenSkillNotif] = useState(false);
   const [hiddenSkillText, setHiddenSkillText] = useState('');
+  const [showGameMessage, setShowGameMessage] = useState(false);
+  const [gameMessageText, setGameMessageText] = useState('');
+  
+  // New state for enhanced features
+  const [sessionId, setSessionId] = useState(localStorage.getItem('puppySessionId'));
+  const [mode, setMode] = useState('personal'); // 'personal' or 'community'
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  const [puppyName, setPuppyName] = useState('');
+  const [showCommunityList, setShowCommunityList] = useState(false);
+  const [communityPuppies, setCommunityPuppies] = useState([]);
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [showReclaimDialog, setShowReclaimDialog] = useState(false);
+  const [userPuppyInCommunity, setUserPuppyInCommunity] = useState(null);
 
   // Helper to pick puppy emoji based on level
   const getPuppyEmoji = () => {
@@ -72,34 +85,72 @@ function App() {
     return { color: '#f44336', label: 'Sad' };
   };
 
+  // Helper to make API calls with session
+  const makeApiCall = async (url, options = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    if (sessionId) {
+      headers['x-session-id'] = sessionId;
+    }
+    
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Update session if provided
+    if (data.sessionId && data.sessionId !== sessionId) {
+      setSessionId(data.sessionId);
+      localStorage.setItem('puppySessionId', data.sessionId);
+    }
+    
+    return data;
+  };
+
   // Fetch puppy state from backend
   const fetchPuppy = async () => {
     setLoading(true);
-    const fullUrl = `${API_URL}/api/puppy`;
+    const fullUrl = `${API_URL}/api/puppy?mode=${mode}`;
     console.log('🔍 DEBUG: API_URL =', API_URL);
     console.log('🔍 DEBUG: Full URL =', fullUrl);
-    console.log('🔍 DEBUG: window.location =', window.location.href);
+    console.log('🔍 DEBUG: Mode =', mode);
     
     try {
       console.log('🔍 DEBUG: Starting fetch...');
-      const res = await fetch(fullUrl);
-      console.log('🔍 DEBUG: Response received =', res);
-      console.log('🔍 DEBUG: Response status =', res.status);
-      console.log('🔍 DEBUG: Response headers =', [...res.headers.entries()]);
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await makeApiCall(fullUrl);
       console.log('🔍 DEBUG: Data received =', data);
+      
+      // Check if user needs to reclaim their puppy from community
+      if (data.needsReclaim && data.userPuppyInCommunity) {
+        setUserPuppyInCommunity(data.userPuppyInCommunity);
+        setShowReclaimDialog(true);
+        setLoading(false);
+        return;
+      }
+      
       setPuppy(data);
+      
+      // Check if this is a new user who needs to name their puppy
+      if (mode === 'personal' && data.name === 'My Puppy' && !isNewUser) {
+        setIsNewUser(true);
+        setShowNameDialog(true);
+      }
     } catch (error) {
       console.error('🔍 DEBUG: Error details =', error);
       console.error('🔍 DEBUG: Error stack =', error.stack);
       setPuppy({ 
         name: 'Error', 
         happiness: 0, 
-        hunger: 100, 
+        energy: 0, 
         skills: [], 
         level: 1, 
         age: 0,
@@ -110,9 +161,104 @@ function App() {
     setLoading(false);
   };
 
+  // Reclaim puppy from community
+  const reclaimPuppy = async () => {
+    try {
+      const data = await makeApiCall(`${API_URL}/api/puppy/reclaim`, {
+        method: 'POST',
+      });
+      setPuppy(data);
+      setGameMessageText(data.message);
+      setShowGameMessage(true);
+      setTimeout(() => setShowGameMessage(false), 4000);
+      setShowReclaimDialog(false);
+      setUserPuppyInCommunity(null);
+    } catch (error) {
+      console.error('Failed to reclaim puppy:', error);
+      alert(`Failed to reclaim puppy: ${error.message}`);
+    }
+  };
+
+  // Create new puppy instead of reclaiming
+  const createNewPuppy = () => {
+    setShowReclaimDialog(false);
+    setUserPuppyInCommunity(null);
+    setIsNewUser(true);
+    setShowNameDialog(true);
+  };
+
+  // Create/rename puppy
+  const createPuppy = async (name) => {
+    try {
+      const data = await makeApiCall(`${API_URL}/api/puppy/create`, {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+      setPuppy(data);
+      setShowNameDialog(false);
+      setIsNewUser(false);
+    } catch (error) {
+      console.error('Failed to create puppy:', error);
+      alert(`Failed to create puppy: ${error.message}`);
+    }
+  };
+
+  // Share puppy to community
+  const sharePuppy = async () => {
+    try {
+      const data = await makeApiCall(`${API_URL}/api/puppy/share`, {
+        method: 'POST',
+      });
+      setGameMessageText(data.message);
+      setShowGameMessage(true);
+      setTimeout(() => setShowGameMessage(false), 4000);
+      // Switch to community mode to see shared puppy
+      setMode('community');
+    } catch (error) {
+      console.error('Failed to share puppy:', error);
+      alert(`Failed to share puppy: ${error.message}`);
+    }
+  };
+
+  // Fetch community puppies
+  const fetchCommunityPuppies = async () => {
+    try {
+      const data = await makeApiCall(`${API_URL}/api/community`);
+      setCommunityPuppies(data);
+      setShowCommunityList(true);
+    } catch (error) {
+      console.error('Failed to fetch community puppies:', error);
+      alert(`Failed to fetch community puppies: ${error.message}`);
+    }
+  };
+
+  // Adopt community puppy
+  const adoptPuppy = async (puppyId) => {
+    try {
+      const data = await makeApiCall(`${API_URL}/api/puppy/adopt`, {
+        method: 'POST',
+        body: JSON.stringify({ puppyId }),
+      });
+      setPuppy(data);
+      setGameMessageText(data.message);
+      setShowGameMessage(true);
+      setTimeout(() => setShowGameMessage(false), 4000);
+      setShowCommunityList(false);
+      setMode('personal');
+    } catch (error) {
+      console.error('Failed to adopt puppy:', error);
+      alert(`Failed to adopt puppy: ${error.message}`);
+    }
+  };
+
+  // Switch mode and fetch puppy
+  const switchMode = async (newMode) => {
+    setMode(newMode);
+  };
+
   useEffect(() => {
     fetchPuppy();
-  }, []);
+  }, [mode]);
 
   // Live timer for puppy age
   useEffect(() => {
@@ -163,20 +309,17 @@ function App() {
     setActionLoading(true);
     setAnimate(true);
     try {
-      const res = await fetch(`${API_URL}/api/puppy/action`, {
+      const data = await makeApiCall(`${API_URL}/api/puppy/action?mode=${mode}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       });
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      const data = await res.json();
       setPuppy(data);
       
       // Show feedback message if action was blocked or has a message
       if (data.message) {
-        alert(data.message);
+        setGameMessageText(data.message);
+        setShowGameMessage(true);
+        setTimeout(() => setShowGameMessage(false), 3000);
       }
     } catch (error) {
       console.error('Failed to perform action:', error);
@@ -191,15 +334,10 @@ function App() {
     if (!userMessage.trim()) return;
     setTalkLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/puppy/action`, {
+      const data = await makeApiCall(`${API_URL}/api/puppy/action?mode=${mode}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'talk', message: userMessage }),
       });
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      const data = await res.json();
       setPuppy(data.puppy || data); // fallback for old response
       
       // Handle hidden skills
@@ -254,6 +392,23 @@ function App() {
       <div className="puppy-card">
         <header className="App-header">
           <h1>🐶 Raise Your LLM Puppy!</h1>
+          
+          {/* Mode Switcher */}
+          <div className="mode-switcher">
+            <button 
+              className={mode === 'personal' ? 'active' : ''}
+              onClick={() => switchMode('personal')}
+            >
+              👤 My Puppy
+            </button>
+            <button 
+              className={mode === 'community' ? 'active' : ''}
+              onClick={() => switchMode('community')}
+            >
+              🏘️ Community
+            </button>
+          </div>
+          
           <div className="puppy-emoji-mood-row">
             <div className={`puppy-emoji-container ${animate ? 'bounce' : ''} ${showSkillAnim ? skillAnimType : ''}`} style={{ fontSize: '5rem', transition: 'all 0.2s' }}>
               {showSkillAnim && lastSkill && (
@@ -269,11 +424,22 @@ function App() {
               <div className="puppy-mood-value">{puppy.happiness} / 100</div>
             </div>
           </div>
+          
+          {/* Puppy Name */}
+          <div className="puppy-name">
+            {puppy.name} {mode === 'community' && '(Community)'}
+          </div>
+          
           <div className="puppy-level">Level {puppy.level}</div>
           {showLevelUp && <div className="puppy-levelup">🎉 Level Up! 🎉</div>}
           {showHiddenSkillNotif && (
             <div className="puppy-hidden-skill-notif">
               ✨ Hidden Skill Unlocked: {hiddenSkillText} ✨
+            </div>
+          )}
+          {showGameMessage && (
+            <div className="puppy-game-message-notif">
+              {gameMessageText}
             </div>
           )}
           <div className="puppy-timer">Puppy age: {timer}</div>
@@ -308,12 +474,18 @@ function App() {
               </div>
             </div>
           </div>
+          
+          {/* Action Buttons */}
           <div className="puppy-actions">
             <button 
               onClick={() => handleAction('feed')} 
               disabled={actionLoading}
-              className={puppy.energy > 80 ? 'not-needed' : ''}
-              title={puppy.energy > 80 ? 'Not hungry right now' : 'Feed your puppy'}
+              className={puppy.energy > 90 ? 'not-needed' : puppy.energy > 70 ? 'less-effective' : ''}
+              title={
+                puppy.energy > 90 ? 'Not hungry at all' : 
+                puppy.energy > 70 ? 'Not very hungry (less effective)' : 
+                'Feed your puppy'
+              }
             >
               🍖 Feed
             </button>
@@ -345,14 +517,110 @@ function App() {
               💬 Talk
             </button>
           </div>
+          
+          {/* Mode-specific buttons */}
+          {mode === 'personal' && (
+            <div className="special-actions">
+              <button 
+                onClick={sharePuppy}
+                disabled={actionLoading}
+                className="share-button"
+                title="Share your puppy with the community when you're away"
+              >
+                🤝 Share to Community
+              </button>
+            </div>
+          )}
+          
+          {mode === 'community' && (
+            <div className="special-actions">
+              <button 
+                onClick={fetchCommunityPuppies}
+                disabled={actionLoading}
+                className="community-button"
+                title="See all community puppies that need care"
+              >
+                🏘️ View All Community Puppies
+              </button>
+            </div>
+          )}
+          
           {actionLoading && <div>Interacting with puppy...</div>}
         </header>
       </div>
+      
+      {/* Naming Dialog */}
+      {showNameDialog && (
+        <div className="puppy-dialog-backdrop" onClick={() => setShowNameDialog(false)}>
+          <div className="puppy-dialog" onClick={e => e.stopPropagation()}>
+            <h2>🎉 Welcome! Name Your Puppy!</h2>
+            <p>Choose a special name for your new companion:</p>
+            <div className="puppy-dialog-inputs">
+              <input
+                type="text"
+                value={puppyName}
+                onChange={e => setPuppyName(e.target.value)}
+                placeholder="Enter puppy name..."
+                onKeyDown={e => { if (e.key === 'Enter') createPuppy(puppyName); }}
+                autoFocus
+              />
+              <button 
+                onClick={() => createPuppy(puppyName)} 
+                disabled={!puppyName.trim()}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Community Puppies List */}
+      {showCommunityList && (
+        <div className="puppy-dialog-backdrop" onClick={() => setShowCommunityList(false)}>
+          <div className="puppy-dialog community-list" onClick={e => e.stopPropagation()}>
+            <h2>🏘️ Community Puppies Need Care!</h2>
+            <div className="community-puppies">
+              {communityPuppies.length === 0 ? (
+                <p>No community puppies right now. Be the first to share!</p>
+              ) : (
+                communityPuppies.map(communityPuppy => (
+                  <div key={communityPuppy.id} className="community-puppy-card">
+                    <div className="community-puppy-header">
+                      <h3>{communityPuppy.name}</h3>
+                      <span className="community-puppy-age">Age: {communityPuppy.age}</span>
+                    </div>
+                    <div className="community-puppy-stats">
+                      <span>😊 {communityPuppy.happiness}%</span>
+                      <span>⚡ {communityPuppy.energy}%</span>
+                      <span>🎓 {communityPuppy.skills} skills</span>
+                      <span>📈 Lv.{communityPuppy.level}</span>
+                    </div>
+                    <div className="community-puppy-actions">
+                      <button 
+                        onClick={() => adoptPuppy(communityPuppy.id)}
+                        className="adopt-button"
+                        disabled={communityPuppy.dead}
+                      >
+                        {communityPuppy.dead ? '💀 Needs Revival' : '💖 Adopt'}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <button onClick={() => setShowCommunityList(false)} style={{ marginTop: '1rem' }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Dialog for talking to the puppy */}
       {showDialog && (
         <div className="puppy-dialog-backdrop" onClick={() => setShowDialog(false)}>
           <div className="puppy-dialog" onClick={e => e.stopPropagation()}>
-            <h2>💬 Talk to your puppy!</h2>
+            <h2>💬 Talk to {puppy.name}!</h2>
             <div className="puppy-conversation">
               {conversation.length === 0 && <div className="puppy-message puppy">Woof! 🐾</div>}
               {conversation.map((msg, idx) => (
@@ -373,6 +641,41 @@ function App() {
               </button>
               <button onClick={() => setShowDialog(false)} style={{ marginLeft: 8 }}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Reclaim Dialog */}
+      {showReclaimDialog && userPuppyInCommunity && (
+        <div className="puppy-dialog-backdrop">
+          <div className="puppy-dialog" onClick={e => e.stopPropagation()}>
+            <h2>🏠 Welcome Back!</h2>
+            <p>Your puppy <strong>{userPuppyInCommunity.name}</strong> is currently in the community being cared for by others.</p>
+            <div className="reclaim-puppy-preview">
+              <h3>📊 {userPuppyInCommunity.name}'s Status:</h3>
+              <div className="reclaim-stats">
+                <span>😊 Happiness: {userPuppyInCommunity.happiness}%</span>
+                <span>⚡ Energy: {userPuppyInCommunity.energy}%</span>
+                <span>🎓 Skills: {userPuppyInCommunity.skills}</span>
+                <span>📈 Level: {userPuppyInCommunity.level}</span>
+                <span>🎂 Age: {userPuppyInCommunity.age} days</span>
+              </div>
+            </div>
+            <p>Would you like to bring <strong>{userPuppyInCommunity.name}</strong> back home, or start fresh with a new puppy?</p>
+            <div className="reclaim-dialog-actions">
+              <button 
+                onClick={reclaimPuppy}
+                className="reclaim-button"
+              >
+                🏠 Bring {userPuppyInCommunity.name} Home
+              </button>
+              <button 
+                onClick={createNewPuppy}
+                className="new-puppy-button"
+              >
+                🆕 Start Fresh with New Puppy
               </button>
             </div>
           </div>

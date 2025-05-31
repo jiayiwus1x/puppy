@@ -207,10 +207,40 @@ app.get('/api/puppy', (req, res) => {
   const { sessionId: newSessionId, userId } = getUserSession(sessionId);
   
   let puppy;
+  let userPuppyInCommunity = null;
+  
   if (mode === 'community') {
     puppy = getCommunityPuppy();
   } else {
-    puppy = getUserPuppy(userId);
+    // Personal mode - check if user has a puppy
+    puppy = puppies.get(userId);
+    
+    if (!puppy) {
+      // Check if user's puppy is in community
+      userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
+      
+      if (userPuppyInCommunity) {
+        // User has a puppy in community - don't create new one
+        return res.json({
+          userPuppyInCommunity: {
+            id: userPuppyInCommunity.id,
+            name: userPuppyInCommunity.name,
+            age: getPuppyAge(userPuppyInCommunity),
+            happiness: userPuppyInCommunity.happiness,
+            energy: userPuppyInCommunity.energy,
+            skills: userPuppyInCommunity.skills.length,
+            level: userPuppyInCommunity.level
+          },
+          sessionId: newSessionId,
+          userId: userId,
+          mode: mode,
+          needsReclaim: true
+        });
+      }
+      
+      // No puppy anywhere - create new one
+      puppy = getUserPuppy(userId);
+    }
   }
   
   updateEnergy(puppy);
@@ -223,6 +253,42 @@ app.get('/api/puppy', (req, res) => {
     sessionId: newSessionId,
     userId: userId,
     mode: mode
+  });
+});
+
+// Endpoint to reclaim puppy from community
+app.post('/api/puppy/reclaim', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { userId } = getUserSession(sessionId);
+  
+  // Find user's puppy in community
+  const userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
+  
+  if (!userPuppyInCommunity) {
+    return res.status(404).json({ error: 'No puppy found in community' });
+  }
+  
+  // Check if user already has a personal puppy (shouldn't happen, but safety check)
+  if (puppies.has(userId)) {
+    return res.status(400).json({ error: 'You already have a personal puppy!' });
+  }
+  
+  // Move puppy back to personal
+  userPuppyInCommunity.inCommunity = false;
+  userPuppyInCommunity.lastActiveTime = Date.now();
+  
+  puppies.set(userId, userPuppyInCommunity);
+  communityPuppies.delete(userPuppyInCommunity.id);
+  
+  updateEnergy(userPuppyInCommunity);
+  updateLevel(userPuppyInCommunity);
+  
+  res.json({ 
+    ...userPuppyInCommunity, 
+    age: getPuppyAge(userPuppyInCommunity),
+    message: `Welcome back, ${userPuppyInCommunity.name}! Your puppy missed you! 🏠`,
+    userId: userId,
+    mode: 'personal'
   });
 });
 
