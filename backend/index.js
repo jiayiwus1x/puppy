@@ -18,21 +18,27 @@ function generateId() {
 }
 
 // Default puppy template
-function createNewPuppy(name = 'Puppy', userId = null) {
-  return {
-    id: generateId(),
+function createNewPuppy(userId, name, breedId = 'labrador') {
+  const breed = DOG_BREEDS[breedId] || DOG_BREEDS['labrador'];
+  
+  const puppy = {
     name: name,
-    owner: userId,
-    birthTime: Date.now(),
+    breed: breedId,
+    breedInfo: breed,
     happiness: 50,
-    energy: 50,
+    energy: 75,
     skills: [],
-    level: 1,
-    lastUpdateTime: Date.now(),
-    dead: false,
-    inCommunity: false,
-    lastActiveTime: Date.now(),
+    hiddenSkills: [],
+    skillsLearned: 0,
+    messages: [`🐶 Meet ${name}, your new ${breed.name}! ${breed.description}`],
+    createdAt: Date.now(),
+    lastUpdate: Date.now(),
+    ownerId: userId,
+    level: 1
   };
+  
+  puppies.set(userId, puppy);
+  return puppy;
 }
 
 // Legacy global puppy (now becomes first community puppy)
@@ -96,6 +102,92 @@ const HIDDEN_SKILLS = [
   { skill: '🎯 Sniper Focus', keywords: ['focus', 'concentrate', 'precision', 'sniper'] }
 ];
 
+// Dog breeds with special abilities
+const DOG_BREEDS = {
+  'welshcorgi': {
+    name: 'Welsh Corgi',
+    description: 'Extra happiness from playing',
+    specialties: ['happiness'],
+    playHappinessBonus: 5, // +5 extra happiness from playing
+    image: 'welshcorgi'
+  },
+  'bordercollie': {
+    name: 'Border Collie', 
+    description: '+20% training success rate',
+    specialties: ['training'],
+    trainingBonus: 0.2, // 20% better training success
+    image: 'bordercollie'
+  },
+  'sibhusky': {
+    name: 'Siberian Husky',
+    description: 'Uses less energy for activities',
+    specialties: ['energy'],
+    energyEfficiency: 0.3, // 30% less energy usage
+    image: 'sibhusky'
+  },
+  'beagle': {
+    name: 'Beagle',
+    description: 'Better at finding hidden skills',
+    specialties: ['skills'],
+    hiddenSkillBonus: 0.5, // 50% higher chance for hidden skills
+    image: 'beagle'
+  },
+  'poodle': {
+    name: 'Poodle',
+    description: 'Learns skills faster',
+    specialties: ['learning'],
+    skillLearningBonus: 0.25, // 25% higher success rate
+    image: 'poodle'
+  },
+  'shihtzu': {
+    name: 'Shih Tzu',
+    description: 'Slower hunger decay',
+    specialties: ['energy'],
+    hungerDecayReduction: 0.5, // 50% slower hunger loss
+    image: 'shihtzu'
+  },
+  'labrador': {
+    name: 'Labrador',
+    description: 'Balanced and cheerful',
+    specialties: ['happiness', 'energy'],
+    playHappinessBonus: 3,
+    energyEfficiency: 0.15,
+    image: 'labrador'
+  },
+  'shiba': {
+    name: 'Shiba Inu',
+    description: 'Independent and resilient',
+    specialties: ['training'],
+    trainingBonus: 0.15,
+    hungerDecayReduction: 0.3,
+    image: 'shiba'
+  },
+  'chihuahua': {
+    name: 'Chihuahua',
+    description: 'High energy but needs more care',
+    specialties: ['happiness'],
+    playHappinessBonus: 7,
+    energyEfficiency: -0.2, // Uses more energy (needs more care)
+    image: 'chihuahua'
+  },
+  'samoyed': {
+    name: 'Samoyed',
+    description: 'Naturally happy and energetic',
+    specialties: ['happiness', 'energy'],
+    playHappinessBonus: 4,
+    hungerDecayReduction: 0.4,
+    image: 'samoyed'
+  }
+};
+
+// Get available breeds list
+function getAvailableBreeds() {
+  return Object.keys(DOG_BREEDS).map(breedId => ({
+    id: breedId,
+    ...DOG_BREEDS[breedId]
+  }));
+}
+
 // Helper to get or create user session
 function getUserSession(sessionId) {
   if (!sessionId) {
@@ -119,8 +211,7 @@ function getUserSession(sessionId) {
 function getUserPuppy(userId, puppyName = null) {
   let puppy = puppies.get(userId);
   if (!puppy) {
-    puppy = createNewPuppy(puppyName || 'My Puppy', userId);
-    puppies.set(userId, puppy);
+    puppy = createNewPuppy(userId, puppyName || 'My Puppy');
   }
   return puppy;
 }
@@ -131,7 +222,7 @@ function getCommunityPuppy() {
   const availablePuppies = Array.from(communityPuppies.values()).filter(p => !p.dead);
   if (availablePuppies.length === 0) {
     // Create a new community puppy if none available
-    const newPuppy = createNewPuppy('Lonely Puppy', null);
+    const newPuppy = createNewPuppy(null, 'Lonely Puppy', 'labrador');
     newPuppy.inCommunity = true;
     communityPuppies.set(newPuppy.id, newPuppy);
     return newPuppy;
@@ -146,26 +237,33 @@ function getCommunityPuppy() {
 function getPuppyAge(puppy) {
   const now = Date.now();
   const msPerDay = 1000 * 60; // 1 minute = 1 day (much faster aging!)
-  return ((now - puppy.birthTime) / msPerDay).toFixed(1); // 1 decimal place
+  return ((now - puppy.createdAt) / msPerDay).toFixed(1); // 1 decimal place
 }
 
 // Helper to update energy based on time passed
-function updateEnergy(puppy) {
+function updatePuppyStats(puppy) {
   const now = Date.now();
-  const msPerEnergyLoss = 1000 * 60 * 2; // 1 energy lost every 2 minutes
-  const elapsed = now - puppy.lastUpdateTime;
+  let msPerEnergyLoss = 1000 * 60 * 2; // 1 energy lost every 2 minutes
+  
+  // Apply breed-specific hunger decay reduction
+  const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
+  if (breedInfo.hungerDecayReduction) {
+    msPerEnergyLoss = msPerEnergyLoss / (1 - breedInfo.hungerDecayReduction);
+  }
+  
+  const elapsed = now - puppy.lastUpdate;
   const energyLoss = Math.floor(elapsed / msPerEnergyLoss);
   if (energyLoss > 0) {
-    puppy.energy = Math.max(0, puppy.energy - energyLoss); // Energy decreases over time
+    puppy.energy = Math.min(100, Math.max(0, puppy.energy + energyLoss)); // Energy increases over time (getting hungrier)
     // Happiness also slowly decreases over time (1 per 4 minutes)
     const happinessLoss = Math.floor(elapsed / (1000 * 60 * 4));
     if (happinessLoss > 0) {
       puppy.happiness = Math.max(0, puppy.happiness - happinessLoss);
     }
-    puppy.lastUpdateTime += energyLoss * msPerEnergyLoss;
+    puppy.lastUpdate += energyLoss * msPerEnergyLoss;
   }
-  // If energy reaches 0, puppy dies (starving)
-  if (puppy.energy <= 0) {
+  // If energy reaches 100, puppy dies (starving)
+  if (puppy.energy >= 100) {
     puppy.dead = true;
   }
 }
@@ -217,7 +315,7 @@ app.get('/api/puppy', (req, res) => {
     
     if (!puppy) {
       // Check if user's puppy is in community
-      userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
+      userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.ownerId === userId);
       
       if (userPuppyInCommunity) {
         // User has a puppy in community - don't create new one
@@ -243,7 +341,7 @@ app.get('/api/puppy', (req, res) => {
     }
   }
   
-  updateEnergy(puppy);
+  updatePuppyStats(puppy);
   updateLevel(puppy);
   puppy.lastActiveTime = Date.now();
   
@@ -262,7 +360,7 @@ app.post('/api/puppy/reclaim', (req, res) => {
   const { userId } = getUserSession(sessionId);
   
   // Find user's puppy in community
-  const userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
+  const userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.ownerId === userId);
   
   if (!userPuppyInCommunity) {
     return res.status(404).json({ error: 'No puppy found in community' });
@@ -280,7 +378,7 @@ app.post('/api/puppy/reclaim', (req, res) => {
   puppies.set(userId, userPuppyInCommunity);
   communityPuppies.delete(userPuppyInCommunity.id);
   
-  updateEnergy(userPuppyInCommunity);
+  updatePuppyStats(userPuppyInCommunity);
   updateLevel(userPuppyInCommunity);
   
   res.json({ 
@@ -295,7 +393,7 @@ app.post('/api/puppy/reclaim', (req, res) => {
 // Endpoint to create/rename puppy
 app.post('/api/puppy/create', (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  const { name } = req.body;
+  const { name, breedId } = req.body;
   const { sessionId: newSessionId, userId } = getUserSession(sessionId);
   
   if (!name || name.trim().length === 0) {
@@ -303,8 +401,7 @@ app.post('/api/puppy/create', (req, res) => {
   }
   
   // Create new puppy with custom name
-  const puppy = createNewPuppy(name.trim(), userId);
-  puppies.set(userId, puppy);
+  const puppy = createNewPuppy(userId, name, breedId);
   
   updateLevel(puppy);
   
@@ -356,7 +453,7 @@ app.post('/api/puppy/adopt', (req, res) => {
   }
   
   // Adopt the community puppy
-  communityPuppy.owner = userId;
+  communityPuppy.ownerId = userId;
   communityPuppy.inCommunity = false;
   communityPuppy.lastActiveTime = Date.now();
   
@@ -405,7 +502,7 @@ app.post('/api/puppy/action', (req, res) => {
     puppy = getUserPuppy(userId);
   }
   
-  updateEnergy(puppy);
+  updatePuppyStats(puppy);
   
   if (puppy.dead && action !== 'feed') {
     // Only allow feeding if dead
@@ -579,7 +676,7 @@ app.post('/api/puppy/action', (req, res) => {
     }
     
     updateLevel(puppy);
-    puppy.lastUpdateTime = Date.now();
+    puppy.lastUpdate = Date.now();
     puppy.lastActiveTime = Date.now();
     
     return res.json({ 
@@ -590,7 +687,7 @@ app.post('/api/puppy/action', (req, res) => {
   }
   
   updateLevel(puppy);
-  puppy.lastUpdateTime = Date.now();
+  puppy.lastUpdate = Date.now();
   puppy.lastActiveTime = Date.now();
   
   // Include any action messages in the response
@@ -601,6 +698,278 @@ app.post('/api/puppy/action', (req, res) => {
   }
   
   res.json(response);
+});
+
+app.post('/api/puppy/train', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { mode } = req.body;
+  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  
+  const puppy = mode === 'community' ? getCommunityPuppy(userId) : getUserPuppy(userId);
+  if (!puppy) {
+    return res.status(404).json({ error: 'No puppy found' });
+  }
+
+  // Check if puppy is dead
+  updatePuppyStats(puppy);
+  if (puppy.energy <= 0) {
+    return res.status(400).json({ error: 'Puppy has died and cannot be trained' });
+  }
+
+  // Training costs energy and requires low hunger
+  if (puppy.energy >= 80) {
+    return res.status(400).json({ error: 'Puppy is too hungry to train! Feed them first.' });
+  }
+
+  // Low happiness blocks training
+  if (puppy.happiness < 20) {
+    return res.status(400).json({ error: 'Puppy is too sad to learn! Play with them first.' });
+  }
+
+  // Apply breed energy efficiency
+  const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
+  let energyCost = 15;
+  if (breedInfo.energyEfficiency) {
+    energyCost = Math.round(energyCost * (1 - breedInfo.energyEfficiency));
+  }
+  
+  puppy.energy += energyCost; // Higher energy = more hungry
+
+  // Calculate failure chance with breed training bonus
+  let baseFailureChance = Math.min(70, puppy.skillsLearned * 5); // 5% per skill, max 70%
+  if (breedInfo.trainingBonus) {
+    baseFailureChance = Math.max(0, baseFailureChance - (breedInfo.trainingBonus * 100));
+  }
+  if (breedInfo.skillLearningBonus) {
+    baseFailureChance = Math.max(0, baseFailureChance - (breedInfo.skillLearningBonus * 100));
+  }
+
+  const failed = Math.random() * 100 < baseFailureChance;
+  
+  if (failed) {
+    const difficultyPercent = Math.round(baseFailureChance);
+    puppy.messages.push(`🎯 Training failed! (${difficultyPercent}% difficulty) ${puppy.name} will try again later.`);
+  } else {
+    const newSkill = getRandomSkill(puppy.skills);
+    if (newSkill) {
+      puppy.skills.push(newSkill);
+      puppy.skillsLearned++;
+      
+      // Check if puppy can learn multiple skills due to high happiness
+      if (puppy.happiness >= 80 && Math.random() < 0.7) {
+        const bonusSkill = getRandomSkill(puppy.skills);
+        if (bonusSkill) {
+          puppy.skills.push(bonusSkill);
+          puppy.skillsLearned++;
+          puppy.messages.push(`🌟 ${puppy.name} learned "${newSkill}" AND "${bonusSkill}"! High happiness enabled double learning!`);
+        } else {
+          puppy.messages.push(`🎯 ${puppy.name} learned "${newSkill}"!`);
+        }
+      } else {
+        puppy.messages.push(`🎯 ${puppy.name} learned "${newSkill}"!`);
+      }
+    } else {
+      puppy.messages.push(`🎯 ${puppy.name} practiced but didn't learn anything new.`);
+    }
+  }
+
+  updateLevel(puppy);
+  puppy.lastUpdate = Date.now();
+  if (mode !== 'community') puppy.lastActiveTime = Date.now();
+  
+  res.json({ 
+    ...puppy, 
+    sessionId: newSessionId,
+    mode,
+    failureChance: Math.round(baseFailureChance)
+  });
+});
+
+app.post('/api/puppy/play', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { mode } = req.body;
+  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  
+  const puppy = mode === 'community' ? getCommunityPuppy(userId) : getUserPuppy(userId);
+  if (!puppy) {
+    return res.status(404).json({ error: 'No puppy found' });
+  }
+
+  // Check if puppy is dead
+  updatePuppyStats(puppy);
+  if (puppy.energy <= 0) {
+    return res.status(400).json({ error: 'Puppy has died and cannot play' });
+  }
+
+  // Playing costs energy but requires less than training
+  if (puppy.energy >= 90) {
+    return res.status(400).json({ error: 'Puppy is too hungry to play! Feed them first.' });
+  }
+
+  // Apply breed energy efficiency
+  const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
+  let energyCost = 5;
+  
+  // Special ability: Maximum happiness uses less energy
+  if (puppy.happiness >= 95) {
+    energyCost = 2; // Uses only 2 energy instead of 5
+  }
+  
+  if (breedInfo.energyEfficiency) {
+    energyCost = Math.round(energyCost * (1 - breedInfo.energyEfficiency));
+  }
+  
+  puppy.energy += energyCost; // Higher energy = more hungry
+
+  // Base happiness increase with breed bonus
+  let happinessIncrease = 10;
+  if (breedInfo.playHappinessBonus) {
+    happinessIncrease += breedInfo.playHappinessBonus;
+  }
+  
+  puppy.happiness = Math.min(100, puppy.happiness + happinessIncrease);
+  
+  const playMessages = [
+    `🎾 ${puppy.name} had fun playing!`,
+    `🏃 ${puppy.name} ran around happily!`,
+    `🎉 ${puppy.name} enjoyed some playtime!`,
+    `🐕 ${puppy.name} played fetch and loved it!`
+  ];
+  
+  let message = playMessages[Math.floor(Math.random() * playMessages.length)];
+  if (breedInfo.playHappinessBonus > 0) {
+    message += ` (+${happinessIncrease} happiness - ${breedInfo.name} specialty!)`;
+  }
+  
+  puppy.messages.push(message);
+
+  updateLevel(puppy);
+  puppy.lastUpdate = Date.now();
+  if (mode !== 'community') puppy.lastActiveTime = Date.now();
+  
+  res.json({ 
+    ...puppy, 
+    sessionId: newSessionId,
+    mode
+  });
+});
+
+app.post('/api/puppy/feed', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { mode } = req.body;
+  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  
+  const puppy = mode === 'community' ? getCommunityPuppy(userId) : getUserPuppy(userId);
+  if (!puppy) {
+    return res.status(404).json({ error: 'No puppy found' });
+  }
+
+  // Check if puppy is dead
+  updatePuppyStats(puppy);
+  if (puppy.energy <= 0) {
+    return res.status(400).json({ error: 'Puppy has died and cannot be fed' });
+  }
+
+  // Feeding effectiveness varies by current energy level
+  let feedingEffectiveness;
+  let feedingMessage;
+  
+  if (puppy.energy <= 30) {
+    // Very hungry
+    feedingEffectiveness = 25;
+    feedingMessage = `🍖 ${puppy.name} devoured the food hungrily!`;
+  } else if (puppy.energy <= 60) {
+    // Moderately hungry  
+    feedingEffectiveness = 20;
+    feedingMessage = `🍖 ${puppy.name} enjoyed their meal!`;
+  } else if (puppy.energy <= 80) {
+    // Not very hungry
+    feedingEffectiveness = 15;
+    feedingMessage = `🍖 ${puppy.name} ate some food, but wasn't super hungry.`;
+  } else {
+    // Almost full
+    feedingEffectiveness = 10;
+    feedingMessage = `🍖 ${puppy.name} nibbled a bit, but was pretty full.`;
+  }
+
+  puppy.energy = Math.max(0, puppy.energy - feedingEffectiveness);
+  puppy.messages.push(feedingMessage);
+
+  updateLevel(puppy);
+  puppy.lastUpdate = Date.now();
+  if (mode !== 'community') puppy.lastActiveTime = Date.now();
+  
+  res.json({ 
+    ...puppy, 
+    sessionId: newSessionId,
+    mode,
+    feedingEffectiveness
+  });
+});
+
+// Endpoint to get available breeds
+app.get('/api/breeds', (req, res) => {
+  res.json({ breeds: getAvailableBreeds() });
+});
+
+// Endpoint to chat with puppy and potentially learn hidden skills
+app.post('/api/puppy/chat', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { message, mode } = req.body;
+  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  
+  const puppy = mode === 'community' ? getCommunityPuppy(userId) : getUserPuppy(userId);
+  if (!puppy) {
+    return res.status(404).json({ error: 'No puppy found' });
+  }
+
+  updatePuppyStats(puppy);
+  if (puppy.energy >= 100) {
+    return res.status(400).json({ error: 'Puppy has died and cannot chat' });
+  }
+
+  // Check for hidden skills with breed bonus
+  const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
+  let hiddenSkillChance = 1.0; // Base chance
+  if (breedInfo.hiddenSkillBonus) {
+    hiddenSkillChance += breedInfo.hiddenSkillBonus;
+  }
+  
+  const discoveredSkills = [];
+  if (message && Math.random() <= hiddenSkillChance) {
+    const newSkills = checkForHiddenSkills(message, puppy);
+    if (newSkills) {
+      discoveredSkills.push(...newSkills);
+      if (breedInfo.hiddenSkillBonus > 0) {
+        puppy.messages.push(`✨ ${puppy.name} discovered: ${newSkills.join(', ')}! (${breedInfo.name} specialty - better at finding hidden skills!)`);
+      } else {
+        puppy.messages.push(`✨ ${puppy.name} discovered: ${newSkills.join(', ')}!`);
+      }
+    }
+  }
+
+  // General chat responses
+  const responses = [
+    `🐕 ${puppy.name} wags their tail!`,
+    `🐶 ${puppy.name} looks at you happily!`,
+    `🎾 ${puppy.name} wants to play!`,
+    `❤️ ${puppy.name} loves spending time with you!`
+  ];
+
+  if (discoveredSkills.length === 0) {
+    puppy.messages.push(responses[Math.floor(Math.random() * responses.length)]);
+  }
+
+  updateLevel(puppy);
+  puppy.lastUpdate = Date.now();
+  if (mode !== 'community') puppy.lastActiveTime = Date.now();
+  
+  res.json({ 
+    ...puppy, 
+    sessionId: newSessionId,
+    mode,
+    discoveredSkills
+  });
 });
 
 app.listen(PORT, () => {

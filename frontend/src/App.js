@@ -62,11 +62,55 @@ function App() {
   const [mode, setMode] = useState('personal'); // 'personal' or 'community'
   const [showNameDialog, setShowNameDialog] = useState(false);
   const [puppyName, setPuppyName] = useState('');
+  const [selectedBreed, setSelectedBreed] = useState('labrador'); // Default breed
+  const [availableBreeds, setAvailableBreeds] = useState([]);
   const [showCommunityList, setShowCommunityList] = useState(false);
   const [communityPuppies, setCommunityPuppies] = useState([]);
   const [isNewUser, setIsNewUser] = useState(false);
   const [showReclaimDialog, setShowReclaimDialog] = useState(false);
   const [userPuppyInCommunity, setUserPuppyInCommunity] = useState(null);
+
+  // Fetch available breeds
+  const fetchBreeds = async () => {
+    try {
+      const data = await makeApiCall(`${API_URL}/api/breeds`);
+      setAvailableBreeds(data.breeds);
+    } catch (error) {
+      console.error('Failed to fetch breeds:', error);
+    }
+  };
+
+  // Helper to pick puppy image or emoji based on breed and level
+  const getPuppyDisplay = () => {
+    if (!puppy) return '🐶';
+    
+    // Try to use breed-specific image if available
+    if (puppy.breed && puppy.breedInfo) {
+      const breedImage = `/dogs/${puppy.breedInfo.image}1.png`; // Use first variant
+      return (
+        <div className="puppy-display">
+          <img 
+            src={breedImage} 
+            alt={puppy.breedInfo.name}
+            className="puppy-image"
+            onError={(e) => {
+              // Fallback to emoji if image fails
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'inline';
+            }}
+          />
+          <span className="puppy-emoji-fallback" style={{ display: 'none' }}>
+            {puppy.level >= 4 ? '🐕‍🦺' : puppy.level >= 2 ? '🦮' : '🐶'}
+          </span>
+        </div>
+      );
+    }
+    
+    // Fallback to emoji
+    if (puppy.level >= 4) return '🐕‍🦺';
+    if (puppy.level >= 2) return '🦮';
+    return '🐶';
+  };
 
   // Helper to pick puppy emoji based on level
   const getPuppyEmoji = () => {
@@ -188,11 +232,11 @@ function App() {
   };
 
   // Create/rename puppy
-  const createPuppy = async (name) => {
+  const createPuppy = async (name, breedId = selectedBreed) => {
     try {
       const data = await makeApiCall(`${API_URL}/api/puppy/create`, {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, breedId }),
       });
       setPuppy(data);
       setShowNameDialog(false);
@@ -260,14 +304,23 @@ function App() {
     fetchPuppy();
   }, [mode]);
 
-  // Live timer for puppy age
+  // Live timer for puppy age (matching backend calculation)
   useEffect(() => {
     if (!puppy || !puppy.birthTime) return;
     const birthTime = Number(puppy.birthTime);
     const interval = setInterval(() => {
-      setTimer(formatDuration(Date.now() - birthTime));
+      const now = Date.now();
+      const msPerDay = 1000 * 60; // 1 minute = 1 day (same as backend)
+      const ageInDays = ((now - birthTime) / msPerDay).toFixed(1);
+      setTimer(`${ageInDays} days`);
     }, 1000);
-    setTimer(formatDuration(Date.now() - birthTime));
+    
+    // Set initial value
+    const now = Date.now();
+    const msPerDay = 1000 * 60; // 1 minute = 1 day (same as backend)
+    const ageInDays = ((now - birthTime) / msPerDay).toFixed(1);
+    setTimer(`${ageInDays} days`);
+    
     return () => clearInterval(interval);
   }, [puppy]);
 
@@ -365,6 +418,11 @@ function App() {
     setTalkLoading(false);
   };
 
+  // Effect to fetch breeds on component mount
+  useEffect(() => {
+    fetchBreeds();
+  }, []);
+
   if (loading) return <div className="App">Loading puppy...</div>;
 
   if (puppy?.error) {
@@ -414,7 +472,7 @@ function App() {
               {showSkillAnim && lastSkill && (
                 <div className="puppy-skill-anim">{lastSkill}!</div>
               )}
-              <span className="puppy-emoji-base">{getPuppyEmoji()}</span>
+              <span className="puppy-emoji-base">{getPuppyDisplay()}</span>
             </div>
             <div className="puppy-mood-bar">
               <div className="puppy-mood-label">{getMood().label}</div>
@@ -429,6 +487,25 @@ function App() {
           <div className="puppy-name">
             {puppy.name} {mode === 'community' && '(Community)'}
           </div>
+          
+          {/* Breed Information */}
+          {puppy.breedInfo && (
+            <div className="breed-info-display">
+              <div className="breed-name-display">🐕 {puppy.breedInfo.name}</div>
+              <div className="breed-specialties-display">
+                {puppy.breedInfo.specialties.map(specialty => (
+                  <span key={specialty} className={`specialty-badge ${specialty}`}>
+                    {specialty === 'happiness' ? '😊' : 
+                     specialty === 'energy' ? '⚡' : 
+                     specialty === 'training' ? '🧠' : 
+                     specialty === 'skills' ? '✨' : 
+                     specialty === 'learning' ? '📚' : '🌟'} {specialty}
+                  </span>
+                ))}
+              </div>
+              <div className="breed-ability-display">{puppy.breedInfo.description}</div>
+            </div>
+          )}
           
           <div className="puppy-level">Level {puppy.level}</div>
           {showLevelUp && <div className="puppy-levelup">🎉 Level Up! 🎉</div>}
@@ -552,23 +629,67 @@ function App() {
       {/* Naming Dialog */}
       {showNameDialog && (
         <div className="puppy-dialog-backdrop" onClick={() => setShowNameDialog(false)}>
-          <div className="puppy-dialog" onClick={e => e.stopPropagation()}>
-            <h2>🎉 Welcome! Name Your Puppy!</h2>
-            <p>Choose a special name for your new companion:</p>
+          <div className="puppy-dialog breed-selection-dialog" onClick={e => e.stopPropagation()}>
+            <h2>🎉 Welcome! Choose Your Puppy!</h2>
+            <p>Pick a name and breed for your new companion:</p>
+            
             <div className="puppy-dialog-inputs">
               <input
                 type="text"
                 value={puppyName}
                 onChange={e => setPuppyName(e.target.value)}
                 placeholder="Enter puppy name..."
-                onKeyDown={e => { if (e.key === 'Enter') createPuppy(puppyName); }}
+                onKeyDown={e => { if (e.key === 'Enter' && puppyName.trim()) createPuppy(puppyName); }}
                 autoFocus
               />
+            </div>
+            
+            <div className="breed-selection">
+              <h3>🐕 Choose a Breed:</h3>
+              <div className="breed-grid">
+                {availableBreeds.map(breed => (
+                  <div 
+                    key={breed.id} 
+                    className={`breed-card ${selectedBreed === breed.id ? 'selected' : ''}`}
+                    onClick={() => setSelectedBreed(breed.id)}
+                  >
+                    <div className="breed-image-container">
+                      <img 
+                        src={`/dogs/${breed.image}1.png`} 
+                        alt={breed.name}
+                        className="breed-preview-image"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'block';
+                        }}
+                      />
+                      <div className="breed-emoji-fallback" style={{ display: 'none' }}>🐶</div>
+                    </div>
+                    <h4>{breed.name}</h4>
+                    <p className="breed-description">{breed.description}</p>
+                    <div className="breed-specialties">
+                      {breed.specialties.map(specialty => (
+                        <span key={specialty} className={`specialty-tag ${specialty}`}>
+                          {specialty === 'happiness' ? '😊' : 
+                           specialty === 'energy' ? '⚡' : 
+                           specialty === 'training' ? '🧠' : 
+                           specialty === 'skills' ? '✨' : 
+                           specialty === 'learning' ? '📚' : '🌟'} {specialty}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="dialog-actions">
               <button 
                 onClick={() => createPuppy(puppyName)} 
                 disabled={!puppyName.trim()}
+                className="create-puppy-button"
               >
-                Create
+                🐕 Create {selectedBreed ? availableBreeds.find(b => b.id === selectedBreed)?.name : 'Puppy'}
               </button>
             </div>
           </div>

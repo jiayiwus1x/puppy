@@ -740,3 +740,226 @@
   background: #f57c00;
   transform: translateY(-2px);
 }
+
+/* Breed Selection Dialog */
+.breed-selection-dialog {
+  max-width: 900px !important;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.breed-selection {
+  margin: 1.5rem 0;
+}
+
+.breed-selection h3 {
+  text-align: center;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.breed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.breed-card {
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.breed-card:hover {
+  border-color: #4caf50;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.breed-card.selected {
+  border-color: #4caf50;
+  background: #f8fff8;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.breed-image-container {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.breed-preview-image {
+  max-height: 80px;
+  max-width: 80px;
+  object-fit: contain;
+}
+
+.breed-emoji-fallback {
+  font-size: 2.5rem;
+}
+
+.breed-card h4 {
+  margin: 0.5rem 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.breed-description {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0.5rem 0;
+  min-height: 2.4rem;
+}
+
+.breed-specialties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.specialty-tag {
+  background: #f0f0f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.specialty-tag.happiness {
+  background: #ffeb3b;
+  color: #333;
+}
+
+.specialty-tag.energy {
+  background: #03a9f4;
+  color: white;
+}
+
+.specialty-tag.training {
+  background: #9c27b0;
+  color: white;
+}
+
+.specialty-tag.skills {
+  background: #ff9800;
+  color: white;
+}
+
+.specialty-tag.learning {
+  background: #4caf50;
+  color: white;
+}
+
+.dialog-actions {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.create-puppy-button {
+  background: linear-gradient(45deg, #4caf50, #45a049);
+  color: white;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.create-puppy-button:hover:not(:disabled) {
+  background: linear-gradient(45deg, #45a049, #4caf50);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.create-puppy-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Puppy Display Styles */
+.puppy-display {
+  display: inline-block;
+  position: relative;
+}
+
+.puppy-image {
+  max-width: 120px;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.puppy-emoji-fallback {
+  font-size: 4rem;
+}
+
+/* Breed Information Display */
+.breed-info-display {
+  margin: 0.5rem 0;
+  text-align: center;
+}
+
+.breed-name-display {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #4caf50;
+  margin-bottom: 0.3rem;
+}
+
+.breed-specialties-display {
+  display: flex;
+  justify-content: center;
+  gap: 0.3rem;
+  margin: 0.3rem 0;
+  flex-wrap: wrap;
+}
+
+.specialty-badge {
+  background: #f0f0f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.specialty-badge.happiness {
+  background: #ffeb3b;
+  color: #333;
+}
+
+.specialty-badge.energy {
+  background: #03a9f4;
+  color: white;
+}
+
+.specialty-badge.training {
+  background: #9c27b0;
+  color: white;
+}
+
+.specialty-badge.skills {
+  background: #ff9800;
+  color: white;
+}
+
+.specialty-badge.learning {
+  background: #4caf50;
+  color: white;
+}
+
+.breed-ability-display {
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
+  margin-top: 0.2rem;
+}

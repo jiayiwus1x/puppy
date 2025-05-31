@@ -68,3 +68,40 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+# Frontend
+
+This is the React frontend for the LLM Puppy app.
+
+## API Configuration
+
+The app uses the Heroku backend for both local development and production deployment:
+
+- **Backend URL**: `https://puppy-backend-bce713c62e5e.herokuapp.com`
+
+You can override this by setting the `REACT_APP_API_URL` environment variable.
+
+## Development
+
+```bash
+npm start
+```
+
+The app will connect to the live Heroku backend, so you don't need to run the backend locally.
+
+## Production Build
+
+```bash
+npm run build
+```
+
+## Hidden Skills Feature
+
+Chat with your puppy using specific keywords to unlock hidden skills:
+- "You're so cute!" → 💖 Heart Melter
+- "You're a genius!" → 🧠 Genius Mode
+- "Let's do magic!" → 🧙 Magic Trick
+- "You're a superhero!" → 🦸 Superhero
+- "Let's do some magic!" → 🧙 Magic Trick
+- "You're such an artist!" → 🎨 Artist
+- And many more!
