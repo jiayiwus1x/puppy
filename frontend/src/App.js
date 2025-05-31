@@ -307,14 +307,14 @@ function App() {
     const birthTime = Number(puppy.birthTime);
     const interval = setInterval(() => {
       const now = Date.now();
-      const msPerDay = 1000 * 60; // 1 minute = 1 day (same as backend)
+      const msPerDay = 1000 * 60 * 60; // 1 hour = 1 day (same as backend)
       const ageInDays = ((now - birthTime) / msPerDay).toFixed(1);
       setTimer(`${ageInDays} days`);
     }, 1000);
     
     // Set initial value
     const now = Date.now();
-    const msPerDay = 1000 * 60; // 1 minute = 1 day (same as backend)
+    const msPerDay = 1000 * 60 * 60; // 1 hour = 1 day (same as backend)
     const ageInDays = ((now - birthTime) / msPerDay).toFixed(1);
     setTimer(`${ageInDays} days`);
     
@@ -511,6 +511,49 @@ function App() {
             </div>
           </div>
           
+          {/* Action Buttons - Moved right below the puppy image */}
+          <div className="puppy-actions">
+            <button 
+              onClick={() => handleAction('feed')} 
+              disabled={actionLoading}
+              className={puppy.energy > 90 ? 'not-needed' : puppy.energy > 70 ? 'less-effective' : ''}
+              title={
+                puppy.energy > 90 ? 'Not hungry at all' : 
+                puppy.energy > 70 ? 'Not very hungry (less effective)' : 
+                'Feed your puppy'
+              }
+            >
+              🍖 Feed
+            </button>
+            <button 
+              onClick={() => handleAction('play')} 
+              disabled={actionLoading || puppy.energy <= 10}
+              className={puppy.energy <= 10 ? 'blocked' : ''}
+              title={puppy.energy <= 10 ? 'Too tired to play! Feed first.' : 'Play with your puppy'}
+            >
+              🎾 Play
+            </button>
+            <button 
+              onClick={() => handleAction('train')} 
+              disabled={actionLoading || puppy.energy <= 20 || puppy.happiness < 20}
+              className={puppy.energy <= 20 || puppy.happiness < 20 ? 'blocked' : ''}
+              title={
+                puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 
+                puppy.happiness < 20 ? 'Too sad to focus! Play or talk first.' :
+                'Train your puppy'
+              }
+            >
+              🧠 Train
+            </button>
+            <button 
+              onClick={() => handleAction('talk')} 
+              disabled={actionLoading}
+              title="Chat with your puppy"
+            >
+              💬 Talk
+            </button>
+          </div>
+          
           {/* Puppy Name */}
           <div className="puppy-name">
             {puppy.name} {mode === 'community' && '(Community)'}
@@ -585,49 +628,6 @@ function App() {
                 )}
               </div>
             </div>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="puppy-actions">
-            <button 
-              onClick={() => handleAction('feed')} 
-              disabled={actionLoading}
-              className={puppy.energy > 90 ? 'not-needed' : puppy.energy > 70 ? 'less-effective' : ''}
-              title={
-                puppy.energy > 90 ? 'Not hungry at all' : 
-                puppy.energy > 70 ? 'Not very hungry (less effective)' : 
-                'Feed your puppy'
-              }
-            >
-              🍖 Feed
-            </button>
-            <button 
-              onClick={() => handleAction('play')} 
-              disabled={actionLoading || puppy.energy <= 10}
-              className={puppy.energy <= 10 ? 'blocked' : ''}
-              title={puppy.energy <= 10 ? 'Too tired to play! Feed first.' : 'Play with your puppy'}
-            >
-              🎾 Play
-            </button>
-            <button 
-              onClick={() => handleAction('train')} 
-              disabled={actionLoading || puppy.energy <= 20 || puppy.happiness < 20}
-              className={puppy.energy <= 20 || puppy.happiness < 20 ? 'blocked' : ''}
-              title={
-                puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 
-                puppy.happiness < 20 ? 'Too sad to focus! Play or talk first.' :
-                'Train your puppy'
-              }
-            >
-              🧠 Train
-            </button>
-            <button 
-              onClick={() => handleAction('talk')} 
-              disabled={actionLoading}
-              title="Chat with your puppy"
-            >
-              💬 Talk
-            </button>
           </div>
           
           {/* Mode-specific buttons */}

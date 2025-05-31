@@ -248,7 +248,7 @@ function getCommunityPuppy() {
 // Helper to calculate age in days
 function getPuppyAge(puppy) {
   const now = Date.now();
-  const msPerDay = 1000 * 60; // 1 minute = 1 day (much faster aging!)
+  const msPerDay = 1000 * 60 * 60; // 1 hour = 1 day (relaxed aging)
   return ((now - puppy.birthTime) / msPerDay).toFixed(1); // 1 decimal place
 }
 
