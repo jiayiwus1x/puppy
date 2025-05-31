@@ -327,9 +327,13 @@ function App() {
             </button>
             <button 
               onClick={() => handleAction('train')} 
-              disabled={actionLoading || puppy.energy <= 20}
-              className={puppy.energy <= 20 ? 'blocked' : ''}
-              title={puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 'Train your puppy'}
+              disabled={actionLoading || puppy.energy <= 20 || puppy.happiness < 20}
+              className={puppy.energy <= 20 || puppy.happiness < 20 ? 'blocked' : ''}
+              title={
+                puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 
+                puppy.happiness < 20 ? 'Too sad to focus! Play or talk first.' :
+                'Train your puppy'
+              }
             >
               🧠 Train
             </button>

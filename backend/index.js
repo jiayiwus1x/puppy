@@ -76,6 +76,11 @@ function updateEnergy() {
   const energyLoss = Math.floor(elapsed / msPerEnergyLoss);
   if (energyLoss > 0) {
     puppy.energy = Math.max(0, puppy.energy - energyLoss); // Energy decreases over time
+    // Happiness also slowly decreases over time (1 per 4 minutes)
+    const happinessLoss = Math.floor(elapsed / (1000 * 60 * 4));
+    if (happinessLoss > 0) {
+      puppy.happiness = Math.max(0, puppy.happiness - happinessLoss);
+    }
     puppy.lastUpdateTime += energyLoss * msPerEnergyLoss;
   }
   // If energy reaches 0, puppy dies (starving)
@@ -136,7 +141,7 @@ app.post('/api/puppy/action', (req, res) => {
     });
   }
   
-  // Check action limitations based on energy level
+  // Check action limitations based on energy and happiness levels
   if (action === 'train') {
     if (puppy.energy <= 20) {
       return res.json({ 
@@ -146,11 +151,41 @@ app.post('/api/puppy/action', (req, res) => {
         actionBlocked: true 
       });
     }
+    if (puppy.happiness < 20) {
+      return res.json({ 
+        ...puppy, 
+        age: getPuppyAge(), 
+        message: 'Your puppy is too sad to focus on training! Play with it first. 😢',
+        actionBlocked: true 
+      });
+    }
+    
     const availableTricks = DOG_TRICKS.filter(trick => !puppy.skills.includes(trick));
     if (availableTricks.length > 0) {
+      // Very low happiness blocks skill learning
+      if (puppy.happiness < 10) {
+        puppy.energy = Math.max(0, puppy.energy - 15);
+        return res.json({ 
+          ...puppy, 
+          age: getPuppyAge(), 
+          message: 'Your puppy is too depressed to learn anything new! 💔 Try playing and talking to cheer it up first.',
+          actionBlocked: false 
+        });
+      }
+      
+      // Normal training
       const trick = availableTricks[Math.floor(Math.random() * availableTricks.length)];
       puppy.skills.push(trick);
-      // Training uses energy
+      
+      // High happiness improves training (learn bonus skill)
+      if (puppy.happiness >= 80 && availableTricks.length > 1) {
+        const secondTrick = availableTricks.filter(t => t !== trick)[Math.floor(Math.random() * (availableTricks.length - 1))];
+        puppy.skills.push(secondTrick);
+        puppy.lastMessage = `🌟 Amazing! Your happy puppy learned TWO skills: "${trick}" and "${secondTrick}"! 🎉`;
+      } else {
+        puppy.lastMessage = `Great! Your puppy learned "${trick}"! 🎓`;
+      }
+      
       puppy.energy = Math.max(0, puppy.energy - 15);
     } else {
       return res.json({ 
@@ -171,9 +206,21 @@ app.post('/api/puppy/action', (req, res) => {
         actionBlocked: true 
       });
     }
-    puppy.happiness = Math.min(100, puppy.happiness + 10);
-    // Playing uses a bit of energy
-    puppy.energy = Math.max(0, puppy.energy - 5);
+    
+    let happinessGain = 10;
+    let playMessage = 'Your puppy had fun playing! 🎾';
+    
+    // Maximum happiness unlocks special play ability
+    if (puppy.happiness >= 95) {
+      happinessGain = 5; // Less gain when already very happy
+      puppy.energy = Math.max(0, puppy.energy - 2); // Uses less energy when super happy
+      playMessage = '✨ Your ecstatic puppy played with magical energy! No tiredness! ✨';
+    } else {
+      puppy.energy = Math.max(0, puppy.energy - 5);
+    }
+    
+    puppy.happiness = Math.min(100, puppy.happiness + happinessGain);
+    puppy.lastMessage = playMessage;
   }
   
   if (action === 'feed') {
@@ -182,7 +229,13 @@ app.post('/api/puppy/action', (req, res) => {
   }
   
   if (action === 'talk') {
-    puppy.happiness = Math.min(100, puppy.happiness + 5);
+    // Maximum happiness unlocks special talk ability
+    let happinessGain = 5;
+    if (puppy.happiness >= 95) {
+      happinessGain = 2; // Less gain when already very happy
+    }
+    
+    puppy.happiness = Math.min(100, puppy.happiness + happinessGain);
     let reply = "Woof! I love talking to you! 🐾";
     let newHiddenSkills = null;
     
@@ -194,6 +247,10 @@ app.post('/api/puppy/action', (req, res) => {
       if (newHiddenSkills && newHiddenSkills.length > 0) {
         const skillName = newHiddenSkills[0].replace(/^[^\s]+ /, ''); // Remove emoji
         reply = `🎉 WOW! I just learned "${newHiddenSkills[0]}"! You're amazing! 🌟`;
+      }
+      // Special response for maximum happiness
+      else if (puppy.happiness >= 100) {
+        reply = "✨ I'm so incredibly happy! I feel like I could learn anything! ✨ 🌈";
       }
       // Regular chat responses
       else if (message.toLowerCase().includes('hello')) reply = "Woof woof! Hello! 🐶";
@@ -216,7 +273,15 @@ app.post('/api/puppy/action', (req, res) => {
   
   updateLevel();
   puppy.lastUpdateTime = Date.now();
-  res.json({ ...puppy, age: getPuppyAge(), actionBlocked: false });
+  
+  // Include any action messages in the response
+  const response = { ...puppy, age: getPuppyAge(), actionBlocked: false };
+  if (puppy.lastMessage) {
+    response.message = puppy.lastMessage;
+    delete puppy.lastMessage; // Clear the message after sending
+  }
+  
+  res.json(response);
 });
 
 app.listen(PORT, () => {
