@@ -7,17 +7,52 @@ const PORT = process.env.PORT || 5050;
 app.use(cors());
 app.use(express.json());
 
-// Placeholder puppy state
-let puppy = {
-  name: 'Puppy',
-  birthTime: Date.now(),
+// Puppy storage system
+let puppies = new Map(); // userId -> puppy data
+let communityPuppies = new Map(); // puppyId -> puppy data
+let sessions = new Map(); // sessionId -> userId
+
+// Generate unique IDs
+function generateId() {
+  return Math.random().toString(36).substr(2, 9);
+}
+
+// Default puppy template
+function createNewPuppy(name = 'Puppy', userId = null) {
+  return {
+    id: generateId(),
+    name: name,
+    owner: userId,
+    birthTime: Date.now(),
+    happiness: 50,
+    energy: 50,
+    skills: [],
+    level: 1,
+    lastUpdateTime: Date.now(),
+    dead: false,
+    inCommunity: false,
+    lastActiveTime: Date.now(),
+  };
+}
+
+// Legacy global puppy (now becomes first community puppy)
+let globalPuppy = {
+  id: 'global',
+  name: 'Community Puppy',
+  owner: null,
+  birthTime: Date.now() - (1000 * 60 * 60), // 1 hour old
   happiness: 50,
-  energy: 50, // 0 = hungry, 100 = full
+  energy: 50,
   skills: [],
   level: 1,
   lastUpdateTime: Date.now(),
   dead: false,
+  inCommunity: true,
+  lastActiveTime: Date.now(),
 };
+
+// Initialize with global puppy in community
+communityPuppies.set('global', globalPuppy);
 
 const DOG_TRICKS = [
   'Sit',
@@ -61,15 +96,61 @@ const HIDDEN_SKILLS = [
   { skill: '🎯 Sniper Focus', keywords: ['focus', 'concentrate', 'precision', 'sniper'] }
 ];
 
+// Helper to get or create user session
+function getUserSession(sessionId) {
+  if (!sessionId) {
+    sessionId = generateId();
+    const userId = generateId();
+    sessions.set(sessionId, userId);
+    return { sessionId, userId, isNew: true };
+  }
+  
+  const userId = sessions.get(sessionId);
+  if (!userId) {
+    const newUserId = generateId();
+    sessions.set(sessionId, newUserId);
+    return { sessionId, userId: newUserId, isNew: true };
+  }
+  
+  return { sessionId, userId, isNew: false };
+}
+
+// Helper to get user's puppy or create new one
+function getUserPuppy(userId, puppyName = null) {
+  let puppy = puppies.get(userId);
+  if (!puppy) {
+    puppy = createNewPuppy(puppyName || 'My Puppy', userId);
+    puppies.set(userId, puppy);
+  }
+  return puppy;
+}
+
+// Helper to get a community puppy
+function getCommunityPuppy() {
+  // Find a random community puppy that needs care
+  const availablePuppies = Array.from(communityPuppies.values()).filter(p => !p.dead);
+  if (availablePuppies.length === 0) {
+    // Create a new community puppy if none available
+    const newPuppy = createNewPuppy('Lonely Puppy', null);
+    newPuppy.inCommunity = true;
+    communityPuppies.set(newPuppy.id, newPuppy);
+    return newPuppy;
+  }
+  
+  // Prioritize puppies that haven't been cared for recently
+  availablePuppies.sort((a, b) => a.lastActiveTime - b.lastActiveTime);
+  return availablePuppies[0];
+}
+
 // Helper to calculate age in days
-function getPuppyAge() {
+function getPuppyAge(puppy) {
   const now = Date.now();
   const msPerDay = 1000 * 60; // 1 minute = 1 day (much faster aging!)
   return ((now - puppy.birthTime) / msPerDay).toFixed(1); // 1 decimal place
 }
 
 // Helper to update energy based on time passed
-function updateEnergy() {
+function updateEnergy(puppy) {
   const now = Date.now();
   const msPerEnergyLoss = 1000 * 60 * 2; // 1 energy lost every 2 minutes
   const elapsed = now - puppy.lastUpdateTime;
@@ -90,12 +171,12 @@ function updateEnergy() {
 }
 
 // Helper to update level based on skills
-function updateLevel() {
+function updateLevel(puppy) {
   puppy.level = 1 + Math.floor(puppy.skills.length / 5);
 }
 
 // Helper to check for hidden skills in chat message
-function checkForHiddenSkills(message) {
+function checkForHiddenSkills(message, puppy) {
   if (!message) return null;
   
   const lowerMessage = message.toLowerCase();
@@ -121,23 +202,153 @@ function checkForHiddenSkills(message) {
 
 // Endpoint to get puppy state
 app.get('/api/puppy', (req, res) => {
-  updateEnergy();
-  updateLevel();
-  res.json({ ...puppy, age: getPuppyAge() });
+  const sessionId = req.headers['x-session-id'];
+  const mode = req.query.mode || 'personal'; // 'personal' or 'community'
+  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  
+  let puppy;
+  if (mode === 'community') {
+    puppy = getCommunityPuppy();
+  } else {
+    puppy = getUserPuppy(userId);
+  }
+  
+  updateEnergy(puppy);
+  updateLevel(puppy);
+  puppy.lastActiveTime = Date.now();
+  
+  res.json({ 
+    ...puppy, 
+    age: getPuppyAge(puppy),
+    sessionId: newSessionId,
+    userId: userId,
+    mode: mode
+  });
+});
+
+// Endpoint to create/rename puppy
+app.post('/api/puppy/create', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { name } = req.body;
+  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  
+  if (!name || name.trim().length === 0) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+  
+  // Create new puppy with custom name
+  const puppy = createNewPuppy(name.trim(), userId);
+  puppies.set(userId, puppy);
+  
+  updateLevel(puppy);
+  
+  res.json({ 
+    ...puppy, 
+    age: getPuppyAge(puppy),
+    sessionId: newSessionId,
+    userId: userId,
+    mode: 'personal'
+  });
+});
+
+// Endpoint to share puppy to community
+app.post('/api/puppy/share', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { userId } = getUserSession(sessionId);
+  
+  const puppy = getUserPuppy(userId);
+  if (!puppy) {
+    return res.status(404).json({ error: 'No puppy found' });
+  }
+  
+  // Move to community
+  puppy.inCommunity = true;
+  puppy.lastActiveTime = Date.now();
+  communityPuppies.set(puppy.id, puppy);
+  puppies.delete(userId);
+  
+  res.json({ 
+    message: `${puppy.name} has been shared with the community! Others can now help take care of them.`,
+    success: true
+  });
+});
+
+// Endpoint to adopt community puppy
+app.post('/api/puppy/adopt', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { puppyId } = req.body;
+  const { userId } = getUserSession(sessionId);
+  
+  const communityPuppy = communityPuppies.get(puppyId);
+  if (!communityPuppy) {
+    return res.status(404).json({ error: 'Community puppy not found' });
+  }
+  
+  // Check if user already has a puppy
+  if (puppies.has(userId)) {
+    return res.status(400).json({ error: 'You already have a puppy! Share it to community first.' });
+  }
+  
+  // Adopt the community puppy
+  communityPuppy.owner = userId;
+  communityPuppy.inCommunity = false;
+  communityPuppy.lastActiveTime = Date.now();
+  
+  puppies.set(userId, communityPuppy);
+  communityPuppies.delete(puppyId);
+  
+  res.json({ 
+    ...communityPuppy, 
+    age: getPuppyAge(communityPuppy),
+    message: `You adopted ${communityPuppy.name}! Welcome to your new family member!`,
+    userId: userId,
+    mode: 'personal'
+  });
+});
+
+// Endpoint to get community puppies list
+app.get('/api/community', (req, res) => {
+  const puppiesList = Array.from(communityPuppies.values())
+    .map(puppy => ({
+      id: puppy.id,
+      name: puppy.name,
+      age: getPuppyAge(puppy),
+      happiness: puppy.happiness,
+      energy: puppy.energy,
+      skills: puppy.skills.length,
+      level: puppy.level,
+      dead: puppy.dead,
+      lastActiveTime: puppy.lastActiveTime
+    }))
+    .sort((a, b) => a.lastActiveTime - b.lastActiveTime); // Most neglected first
+    
+  res.json(puppiesList);
 });
 
 // Endpoint to interact with puppy (feed, play, train, talk)
 app.post('/api/puppy/action', (req, res) => {
   const { action, message } = req.body;
-  updateEnergy();
+  const sessionId = req.headers['x-session-id'];
+  const mode = req.query.mode || 'personal';
+  const { userId } = getUserSession(sessionId);
+  
+  let puppy;
+  if (mode === 'community') {
+    puppy = getCommunityPuppy();
+  } else {
+    puppy = getUserPuppy(userId);
+  }
+  
+  updateEnergy(puppy);
   
   if (puppy.dead && action !== 'feed') {
     // Only allow feeding if dead
     return res.json({ 
       ...puppy, 
-      age: getPuppyAge(), 
+      age: getPuppyAge(puppy), 
       message: 'Your puppy is too weak to do anything. Try feeding it!',
-      actionBlocked: true 
+      actionBlocked: true,
+      mode: mode
     });
   }
   
@@ -146,17 +357,19 @@ app.post('/api/puppy/action', (req, res) => {
     if (puppy.energy <= 20) {
       return res.json({ 
         ...puppy, 
-        age: getPuppyAge(), 
+        age: getPuppyAge(puppy), 
         message: 'Your puppy is too tired to focus on training! Feed it first. 🍖',
-        actionBlocked: true 
+        actionBlocked: true,
+        mode: mode
       });
     }
     if (puppy.happiness < 20) {
       return res.json({ 
         ...puppy, 
-        age: getPuppyAge(), 
+        age: getPuppyAge(puppy), 
         message: 'Your puppy is too sad to focus on training! Play with it first. 😢',
-        actionBlocked: true 
+        actionBlocked: true,
+        mode: mode
       });
     }
     
@@ -167,9 +380,10 @@ app.post('/api/puppy/action', (req, res) => {
         puppy.energy = Math.max(0, puppy.energy - 15);
         return res.json({ 
           ...puppy, 
-          age: getPuppyAge(), 
+          age: getPuppyAge(puppy), 
           message: 'Your puppy is too depressed to learn anything new! 💔 Try playing and talking to cheer it up first.',
-          actionBlocked: false 
+          actionBlocked: false,
+          mode: mode
         });
       }
       
@@ -184,9 +398,10 @@ app.post('/api/puppy/action', (req, res) => {
         puppy.lastMessage = `Training was challenging! Your puppy tried hard but didn't learn anything new this time. (${Math.round(failureChance * 100)}% difficulty) 😅`;
         return res.json({ 
           ...puppy, 
-          age: getPuppyAge(), 
+          age: getPuppyAge(puppy), 
           message: puppy.lastMessage,
-          actionBlocked: false 
+          actionBlocked: false,
+          mode: mode
         });
       }
       
@@ -207,9 +422,10 @@ app.post('/api/puppy/action', (req, res) => {
     } else {
       return res.json({ 
         ...puppy, 
-        age: getPuppyAge(), 
+        age: getPuppyAge(puppy), 
         message: 'Your puppy has learned all the basic tricks! Try chatting to unlock hidden skills! 💬',
-        actionBlocked: false 
+        actionBlocked: false,
+        mode: mode
       });
     }
   }
@@ -218,9 +434,10 @@ app.post('/api/puppy/action', (req, res) => {
     if (puppy.energy <= 10) {
       return res.json({ 
         ...puppy, 
-        age: getPuppyAge(), 
+        age: getPuppyAge(puppy), 
         message: 'Your puppy is too tired to play! Feed it first. 🍖',
-        actionBlocked: true 
+        actionBlocked: true,
+        mode: mode
       });
     }
     
@@ -274,7 +491,7 @@ app.post('/api/puppy/action', (req, res) => {
     
     if (message) {
       // Check for hidden skills first
-      newHiddenSkills = checkForHiddenSkills(message);
+      newHiddenSkills = checkForHiddenSkills(message, puppy);
       
       // Special responses for hidden skills
       if (newHiddenSkills && newHiddenSkills.length > 0) {
@@ -295,20 +512,23 @@ app.post('/api/puppy/action', (req, res) => {
       else if (message.toLowerCase().includes('secret')) reply = "Psst... try talking about different topics to unlock my hidden talents! 🤫";
     }
     
-    updateLevel();
+    updateLevel(puppy);
     puppy.lastUpdateTime = Date.now();
+    puppy.lastActiveTime = Date.now();
+    
     return res.json({ 
-      puppy: { ...puppy, age: getPuppyAge() }, 
+      puppy: { ...puppy, age: getPuppyAge(puppy), mode: mode }, 
       reply,
       newSkills: newHiddenSkills // Send info about newly unlocked skills
     });
   }
   
-  updateLevel();
+  updateLevel(puppy);
   puppy.lastUpdateTime = Date.now();
+  puppy.lastActiveTime = Date.now();
   
   // Include any action messages in the response
-  const response = { ...puppy, age: getPuppyAge(), actionBlocked: false };
+  const response = { ...puppy, age: getPuppyAge(puppy), actionBlocked: false, mode: mode };
   if (puppy.lastMessage) {
     response.message = puppy.lastMessage;
     delete puppy.lastMessage; // Clear the message after sending
