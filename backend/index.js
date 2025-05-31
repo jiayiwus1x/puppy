@@ -173,12 +173,29 @@ app.post('/api/puppy/action', (req, res) => {
         });
       }
       
-      // Normal training
+      // Normal training with difficulty scaling
+      const totalSkills = puppy.skills.length;
+      const failureChance = Math.min(0.7, totalSkills * 0.05); // 5% per skill, max 70%
+      const random = Math.random();
+      
+      if (random < failureChance) {
+        // Training failed
+        puppy.energy = Math.max(0, puppy.energy - 15);
+        puppy.lastMessage = `Training was challenging! Your puppy tried hard but didn't learn anything new this time. (${Math.round(failureChance * 100)}% difficulty) 😅`;
+        return res.json({ 
+          ...puppy, 
+          age: getPuppyAge(), 
+          message: puppy.lastMessage,
+          actionBlocked: false 
+        });
+      }
+      
+      // Training succeeded
       const trick = availableTricks[Math.floor(Math.random() * availableTricks.length)];
       puppy.skills.push(trick);
       
       // High happiness improves training (learn bonus skill)
-      if (puppy.happiness >= 80 && availableTricks.length > 1) {
+      if (puppy.happiness >= 80 && availableTricks.length > 1 && random > 0.5) {
         const secondTrick = availableTricks.filter(t => t !== trick)[Math.floor(Math.random() * (availableTricks.length - 1))];
         puppy.skills.push(secondTrick);
         puppy.lastMessage = `🌟 Amazing! Your happy puppy learned TWO skills: "${trick}" and "${secondTrick}"! 🎉`;
@@ -224,7 +241,23 @@ app.post('/api/puppy/action', (req, res) => {
   }
   
   if (action === 'feed') {
-    puppy.energy = Math.min(100, puppy.energy + 25); // Increase energy (make less hungry)
+    // Diminishing returns based on current energy level
+    let energyGain;
+    if (puppy.energy >= 80) {
+      energyGain = 10; // Very little gain when already full
+      puppy.lastMessage = "Your puppy nibbled a bit but isn't very hungry. 🥱";
+    } else if (puppy.energy >= 60) {
+      energyGain = 15; // Reduced gain when moderately full
+      puppy.lastMessage = "Your puppy ate some food but wasn't super hungry. 😊";
+    } else if (puppy.energy >= 30) {
+      energyGain = 20; // Normal gain when moderately hungry
+      puppy.lastMessage = "Your puppy enjoyed the meal! 😋";
+    } else {
+      energyGain = 25; // Full gain when very hungry
+      puppy.lastMessage = "Your puppy devoured the food hungrily! 🤤";
+    }
+    
+    puppy.energy = Math.min(100, puppy.energy + energyGain);
     if (puppy.energy > 0) puppy.dead = false; // Revive if has energy
   }
   
