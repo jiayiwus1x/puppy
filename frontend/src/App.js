@@ -23,20 +23,6 @@ function ProgressBar({ label, value, max, color }) {
   );
 }
 
-function formatDuration(ms) {
-  const totalSeconds = Math.floor(ms / 1000);
-  const days = Math.floor(totalSeconds / (60 * 60 * 24));
-  const hours = Math.floor((totalSeconds % (60 * 60 * 24)) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  let parts = [];
-  if (days) parts.push(`${days} day${days > 1 ? 's' : ''}`);
-  if (hours) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
-  if (minutes) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-  if (seconds || parts.length === 0) parts.push(`${seconds} second${seconds !== 1 ? 's' : ''}`);
-  return parts.join(' ');
-}
-
 function App() {
   const [puppy, setPuppy] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -126,14 +112,6 @@ function App() {
     }
     
     // Fallback to emoji with level progression
-    if (puppy.level >= 4) return '🐕‍🦺';
-    if (puppy.level >= 2) return '🦮';
-    return '🐶';
-  };
-
-  // Helper to pick puppy emoji based on level
-  const getPuppyEmoji = () => {
-    if (!puppy) return '🐶';
     if (puppy.level >= 4) return '🐕‍🦺';
     if (puppy.level >= 2) return '🦮';
     return '🐶';
