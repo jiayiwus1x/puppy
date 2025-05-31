@@ -7,6 +7,84 @@ const PORT = process.env.PORT || 5050;
 app.use(cors());
 app.use(express.json());
 
+// Dog breeds with special abilities - MOVED TO TOP
+const DOG_BREEDS = {
+  'welshcorgi': {
+    name: 'Welsh Corgi',
+    description: 'Extra happiness from playing',
+    specialties: ['happiness'],
+    playHappinessBonus: 5, // +5 extra happiness from playing
+    image: 'welshcorgi'
+  },
+  'bordercollie': {
+    name: 'Border Collie', 
+    description: '+20% training success rate',
+    specialties: ['training'],
+    trainingBonus: 0.2, // 20% better training success
+    image: 'bordercollie'
+  },
+  'sibhusky': {
+    name: 'Siberian Husky',
+    description: 'Uses less energy for activities',
+    specialties: ['energy'],
+    energyEfficiency: 0.3, // 30% less energy usage
+    image: 'sibhusky'
+  },
+  'beagle': {
+    name: 'Beagle',
+    description: 'Better at finding hidden skills',
+    specialties: ['skills'],
+    hiddenSkillBonus: 0.5, // 50% higher chance for hidden skills
+    image: 'beagle'
+  },
+  'poodle': {
+    name: 'Poodle',
+    description: 'Learns skills faster',
+    specialties: ['learning'],
+    skillLearningBonus: 0.25, // 25% higher success rate
+    image: 'poodle'
+  },
+  'shihtzu': {
+    name: 'Shih Tzu',
+    description: 'Slower hunger decay',
+    specialties: ['energy'],
+    hungerDecayReduction: 0.5, // 50% slower hunger loss
+    image: 'shihtzu'
+  },
+  'labrador': {
+    name: 'Labrador',
+    description: 'Balanced and cheerful',
+    specialties: ['happiness', 'energy'],
+    playHappinessBonus: 3,
+    energyEfficiency: 0.15,
+    image: 'labrador'
+  },
+  'shiba': {
+    name: 'Shiba Inu',
+    description: 'Independent and resilient',
+    specialties: ['training'],
+    trainingBonus: 0.15,
+    hungerDecayReduction: 0.3,
+    image: 'shiba'
+  },
+  'chihuahua': {
+    name: 'Chihuahua',
+    description: 'High energy but needs more care',
+    specialties: ['happiness'],
+    playHappinessBonus: 7,
+    energyEfficiency: -0.2, // Uses more energy (needs more care)
+    image: 'chihuahua'
+  },
+  'samoyed': {
+    name: 'Samoyed',
+    description: 'Naturally happy and energetic',
+    specialties: ['happiness', 'energy'],
+    playHappinessBonus: 4,
+    hungerDecayReduction: 0.4,
+    image: 'samoyed'
+  }
+};
+
 // Puppy storage system
 let puppies = new Map(); // userId -> puppy data
 let communityPuppies = new Map(); // puppyId -> puppy data
@@ -113,84 +191,6 @@ const HIDDEN_SKILLS = [
   { skill: '🥷 Ninja Stealth', keywords: ['ninja', 'stealth', 'shadow', 'katana'] },
   { skill: '🎯 Sniper Focus', keywords: ['focus', 'concentrate', 'precision', 'sniper'] }
 ];
-
-// Dog breeds with special abilities
-const DOG_BREEDS = {
-  'welshcorgi': {
-    name: 'Welsh Corgi',
-    description: 'Extra happiness from playing',
-    specialties: ['happiness'],
-    playHappinessBonus: 5, // +5 extra happiness from playing
-    image: 'welshcorgi'
-  },
-  'bordercollie': {
-    name: 'Border Collie', 
-    description: '+20% training success rate',
-    specialties: ['training'],
-    trainingBonus: 0.2, // 20% better training success
-    image: 'bordercollie'
-  },
-  'sibhusky': {
-    name: 'Siberian Husky',
-    description: 'Uses less energy for activities',
-    specialties: ['energy'],
-    energyEfficiency: 0.3, // 30% less energy usage
-    image: 'sibhusky'
-  },
-  'beagle': {
-    name: 'Beagle',
-    description: 'Better at finding hidden skills',
-    specialties: ['skills'],
-    hiddenSkillBonus: 0.5, // 50% higher chance for hidden skills
-    image: 'beagle'
-  },
-  'poodle': {
-    name: 'Poodle',
-    description: 'Learns skills faster',
-    specialties: ['learning'],
-    skillLearningBonus: 0.25, // 25% higher success rate
-    image: 'poodle'
-  },
-  'shihtzu': {
-    name: 'Shih Tzu',
-    description: 'Slower hunger decay',
-    specialties: ['energy'],
-    hungerDecayReduction: 0.5, // 50% slower hunger loss
-    image: 'shihtzu'
-  },
-  'labrador': {
-    name: 'Labrador',
-    description: 'Balanced and cheerful',
-    specialties: ['happiness', 'energy'],
-    playHappinessBonus: 3,
-    energyEfficiency: 0.15,
-    image: 'labrador'
-  },
-  'shiba': {
-    name: 'Shiba Inu',
-    description: 'Independent and resilient',
-    specialties: ['training'],
-    trainingBonus: 0.15,
-    hungerDecayReduction: 0.3,
-    image: 'shiba'
-  },
-  'chihuahua': {
-    name: 'Chihuahua',
-    description: 'High energy but needs more care',
-    specialties: ['happiness'],
-    playHappinessBonus: 7,
-    energyEfficiency: -0.2, // Uses more energy (needs more care)
-    image: 'chihuahua'
-  },
-  'samoyed': {
-    name: 'Samoyed',
-    description: 'Naturally happy and energetic',
-    specialties: ['happiness', 'energy'],
-    playHappinessBonus: 4,
-    hungerDecayReduction: 0.4,
-    image: 'samoyed'
-  }
-};
 
 // Get available breeds list
 function getAvailableBreeds() {
