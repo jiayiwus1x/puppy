@@ -17,24 +17,33 @@ function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
 
+// Helper to get a random skill that the puppy hasn't learned yet
+function getRandomSkill(learnedSkills) {
+  const availableSkills = DOG_TRICKS.filter(skill => !learnedSkills.includes(skill));
+  if (availableSkills.length === 0) return null;
+  return availableSkills[Math.floor(Math.random() * availableSkills.length)];
+}
+
 // Default puppy template
-function createNewPuppy(userId, name, breedId = 'labrador') {
+function createNewPuppy(userId, name = 'My Puppy', breedId = 'labrador') {
   const breed = DOG_BREEDS[breedId] || DOG_BREEDS['labrador'];
   
   const puppy = {
+    id: generateId(),
     name: name,
     breed: breedId,
     breedInfo: breed,
+    owner: userId,
+    birthTime: Date.now(),
     happiness: 50,
-    energy: 75,
+    energy: 50, // Start with normal energy (lower is hungrier)
     skills: [],
-    hiddenSkills: [],
-    skillsLearned: 0,
+    level: 1,
+    lastUpdateTime: Date.now(),
+    lastActiveTime: Date.now(),
+    dead: false,
+    inCommunity: false,
     messages: [`🐶 Meet ${name}, your new ${breed.name}! ${breed.description}`],
-    createdAt: Date.now(),
-    lastUpdate: Date.now(),
-    ownerId: userId,
-    level: 1
   };
   
   puppies.set(userId, puppy);
@@ -45,6 +54,8 @@ function createNewPuppy(userId, name, breedId = 'labrador') {
 let globalPuppy = {
   id: 'global',
   name: 'Community Puppy',
+  breed: 'labrador',
+  breedInfo: DOG_BREEDS['labrador'],
   owner: null,
   birthTime: Date.now() - (1000 * 60 * 60), // 1 hour old
   happiness: 50,
@@ -52,9 +63,10 @@ let globalPuppy = {
   skills: [],
   level: 1,
   lastUpdateTime: Date.now(),
+  lastActiveTime: Date.now(),
   dead: false,
   inCommunity: true,
-  lastActiveTime: Date.now(),
+  messages: [],
 };
 
 // Initialize with global puppy in community
@@ -237,7 +249,7 @@ function getCommunityPuppy() {
 function getPuppyAge(puppy) {
   const now = Date.now();
   const msPerDay = 1000 * 60; // 1 minute = 1 day (much faster aging!)
-  return ((now - puppy.createdAt) / msPerDay).toFixed(1); // 1 decimal place
+  return ((now - puppy.birthTime) / msPerDay).toFixed(1); // 1 decimal place
 }
 
 // Helper to update energy based on time passed
@@ -251,7 +263,7 @@ function updatePuppyStats(puppy) {
     msPerEnergyLoss = msPerEnergyLoss / (1 - breedInfo.hungerDecayReduction);
   }
   
-  const elapsed = now - puppy.lastUpdate;
+  const elapsed = now - puppy.lastUpdateTime;
   const energyLoss = Math.floor(elapsed / msPerEnergyLoss);
   if (energyLoss > 0) {
     puppy.energy = Math.min(100, Math.max(0, puppy.energy + energyLoss)); // Energy increases over time (getting hungrier)
@@ -260,7 +272,7 @@ function updatePuppyStats(puppy) {
     if (happinessLoss > 0) {
       puppy.happiness = Math.max(0, puppy.happiness - happinessLoss);
     }
-    puppy.lastUpdate += energyLoss * msPerEnergyLoss;
+    puppy.lastUpdateTime += energyLoss * msPerEnergyLoss;
   }
   // If energy reaches 100, puppy dies (starving)
   if (puppy.energy >= 100) {
@@ -315,7 +327,7 @@ app.get('/api/puppy', (req, res) => {
     
     if (!puppy) {
       // Check if user's puppy is in community
-      userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.ownerId === userId);
+      userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
       
       if (userPuppyInCommunity) {
         // User has a puppy in community - don't create new one
@@ -360,7 +372,7 @@ app.post('/api/puppy/reclaim', (req, res) => {
   const { userId } = getUserSession(sessionId);
   
   // Find user's puppy in community
-  const userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.ownerId === userId);
+  const userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
   
   if (!userPuppyInCommunity) {
     return res.status(404).json({ error: 'No puppy found in community' });
@@ -453,7 +465,7 @@ app.post('/api/puppy/adopt', (req, res) => {
   }
   
   // Adopt the community puppy
-  communityPuppy.ownerId = userId;
+  communityPuppy.owner = userId;
   communityPuppy.inCommunity = false;
   communityPuppy.lastActiveTime = Date.now();
   
@@ -676,7 +688,7 @@ app.post('/api/puppy/action', (req, res) => {
     }
     
     updateLevel(puppy);
-    puppy.lastUpdate = Date.now();
+    puppy.lastUpdateTime = Date.now();
     puppy.lastActiveTime = Date.now();
     
     return res.json({ 
@@ -687,7 +699,7 @@ app.post('/api/puppy/action', (req, res) => {
   }
   
   updateLevel(puppy);
-  puppy.lastUpdate = Date.now();
+  puppy.lastUpdateTime = Date.now();
   puppy.lastActiveTime = Date.now();
   
   // Include any action messages in the response
@@ -774,7 +786,7 @@ app.post('/api/puppy/train', (req, res) => {
   }
 
   updateLevel(puppy);
-  puppy.lastUpdate = Date.now();
+  puppy.lastUpdateTime = Date.now();
   if (mode !== 'community') puppy.lastActiveTime = Date.now();
   
   res.json({ 
@@ -844,7 +856,7 @@ app.post('/api/puppy/play', (req, res) => {
   puppy.messages.push(message);
 
   updateLevel(puppy);
-  puppy.lastUpdate = Date.now();
+  puppy.lastUpdateTime = Date.now();
   if (mode !== 'community') puppy.lastActiveTime = Date.now();
   
   res.json({ 
@@ -896,7 +908,7 @@ app.post('/api/puppy/feed', (req, res) => {
   puppy.messages.push(feedingMessage);
 
   updateLevel(puppy);
-  puppy.lastUpdate = Date.now();
+  puppy.lastUpdateTime = Date.now();
   if (mode !== 'community') puppy.lastActiveTime = Date.now();
   
   res.json({ 
@@ -961,7 +973,7 @@ app.post('/api/puppy/chat', (req, res) => {
   }
 
   updateLevel(puppy);
-  puppy.lastUpdate = Date.now();
+  puppy.lastUpdateTime = Date.now();
   if (mode !== 'community') puppy.lastActiveTime = Date.now();
   
   res.json({ 

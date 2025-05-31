@@ -425,24 +425,36 @@ function App() {
     if (!userMessage.trim()) return;
     setTalkLoading(true);
     try {
-      const data = await makeApiCall(`${API_URL}/api/puppy/action?mode=${mode}`, {
+      const data = await makeApiCall(`${API_URL}/api/puppy/chat`, {
         method: 'POST',
-        body: JSON.stringify({ action: 'talk', message: userMessage }),
+        body: JSON.stringify({ message: userMessage, mode }),
       });
-      setPuppy(data.puppy || data); // fallback for old response
+      setPuppy(data);
       
-      // Handle hidden skills
-      if (data.newSkills && data.newSkills.length > 0) {
-        setHiddenSkillText(data.newSkills.join(', '));
+      // Handle discovered hidden skills with breed bonuses
+      if (data.discoveredSkills && data.discoveredSkills.length > 0) {
+        setHiddenSkillText(data.discoveredSkills.join(', '));
         setShowHiddenSkillNotif(true);
         setTimeout(() => setShowHiddenSkillNotif(false), 4000);
       }
       
-      setConversation((prev) => [
-        ...prev,
-        { from: 'user', text: userMessage },
-        { from: 'puppy', text: data.reply || 'Woof! 🐾' },
-      ]);
+      // Show any messages from the backend
+      if (data.messages && data.messages.length > 0) {
+        const latestMessage = data.messages[data.messages.length - 1];
+        setConversation((prev) => [
+          ...prev,
+          { from: 'user', text: userMessage },
+          { from: 'puppy', text: latestMessage },
+        ]);
+      } else {
+        // Fallback conversation
+        setConversation((prev) => [
+          ...prev,
+          { from: 'user', text: userMessage },
+          { from: 'puppy', text: `🐕 ${puppy.name} wags their tail happily!` },
+        ]);
+      }
+      
       setUserMessage('');
     } catch (error) {
       console.error('Failed to send message:', error);
