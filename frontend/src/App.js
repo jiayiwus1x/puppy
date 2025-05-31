@@ -56,6 +56,7 @@ function App() {
   const [hiddenSkillText, setHiddenSkillText] = useState('');
   const [showGameMessage, setShowGameMessage] = useState(false);
   const [gameMessageText, setGameMessageText] = useState('');
+  const [isTransformationLevelUp, setIsTransformationLevelUp] = useState(false);
   
   // New state for enhanced features
   const [sessionId, setSessionId] = useState(localStorage.getItem('puppySessionId'));
@@ -86,15 +87,33 @@ function App() {
     
     // Try to use breed-specific image if available
     if (puppy.breed && puppy.breedInfo) {
-      const breedImage = `/dogs/${puppy.breedInfo.image}1.png`; // Use first variant
+      // Choose image variant based on level for visual progression
+      let imageVariant = 1; // Default for level 1
+      if (puppy.level >= 6) {
+        imageVariant = 4; // Highest level appearance
+      } else if (puppy.level >= 4) {
+        imageVariant = 3; // Advanced appearance
+      } else if (puppy.level >= 2) {
+        imageVariant = 2; // Intermediate appearance
+      }
+      
+      const breedImage = `/dogs/${puppy.breedInfo.image}${imageVariant}.png`;
       return (
         <div className="puppy-display">
           <img 
             src={breedImage} 
-            alt={puppy.breedInfo.name}
+            alt={`${puppy.breedInfo.name} (Level ${puppy.level})`}
             className="puppy-image"
             onError={(e) => {
-              // Fallback to emoji if image fails
+              // Try lower variant if current doesn't exist
+              if (imageVariant > 1) {
+                const fallbackImage = `/dogs/${puppy.breedInfo.image}1.png`;
+                if (e.target.src !== fallbackImage) {
+                  e.target.src = fallbackImage;
+                  return;
+                }
+              }
+              // Fallback to emoji if all images fail
               e.target.style.display = 'none';
               e.target.nextSibling.style.display = 'inline';
             }}
@@ -106,7 +125,7 @@ function App() {
       );
     }
     
-    // Fallback to emoji
+    // Fallback to emoji with level progression
     if (puppy.level >= 4) return '🐕‍🦺';
     if (puppy.level >= 2) return '🦮';
     return '🐶';
@@ -324,12 +343,31 @@ function App() {
     return () => clearInterval(interval);
   }, [puppy]);
 
-  // Watch for level up
+  // Watch for level up and appearance changes
   useEffect(() => {
     if (!puppy) return;
+    
     if (puppy.level > lastLevel) {
+      // Check if appearance should change at this level
+      const shouldTransform = puppy.level === 2 || puppy.level === 4 || puppy.level === 6;
+      setIsTransformationLevelUp(shouldTransform);
+      
       setShowLevelUp(true);
-      setTimeout(() => setShowLevelUp(false), 2000);
+      setTimeout(() => {
+        setShowLevelUp(false);
+        setIsTransformationLevelUp(false);
+      }, shouldTransform ? 3000 : 2000);
+      
+      if (shouldTransform) {
+        // Add special transformation animation
+        setAnimate(true);
+        setSkillAnimType('transform');
+        setShowSkillAnim(true);
+        setTimeout(() => {
+          setShowSkillAnim(false);
+          setAnimate(false);
+        }, 3000);
+      }
     }
     setLastLevel(puppy.level);
   }, [puppy, lastLevel]);
@@ -508,7 +546,14 @@ function App() {
           )}
           
           <div className="puppy-level">Level {puppy.level}</div>
-          {showLevelUp && <div className="puppy-levelup">🎉 Level Up! 🎉</div>}
+          {showLevelUp && (
+            <div className={`puppy-levelup ${isTransformationLevelUp ? 'transform' : ''}`}>
+              {isTransformationLevelUp ? 
+                `🌟 Level ${puppy.level}! Your ${puppy.breedInfo?.name || 'puppy'} is evolving! 🌟` : 
+                '🎉 Level Up! 🎉'
+              }
+            </div>
+          )}
           {showHiddenSkillNotif && (
             <div className="puppy-hidden-skill-notif">
               ✨ Hidden Skill Unlocked: {hiddenSkillText} ✨
