@@ -5,7 +5,8 @@ const DOG_TRICKS = [
   'Sit', 'Stay', 'Roll Over', 'Shake Paw', 'Play Dead', 'Fetch', 'Spin', 'Speak', 'High Five', 'Jump', 'Dance', 'Crawl', 'Back Up', 'Bow', 'Wave', 'Balance Treat', 'Heel', 'Find It', 'Ring Bell', 'Open Door'
 ];
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://puppy-backend-bce713c62e5e.herokuapp.com';
+// Use backend URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL;
 
 function ProgressBar({ label, value, max, color }) {
   return (
@@ -51,6 +52,8 @@ function App() {
   const [showSkillAnim, setShowSkillAnim] = useState(false);
   const [lastSkill, setLastSkill] = useState(null);
   const [skillAnimType, setSkillAnimType] = useState('');
+  const [showHiddenSkillNotif, setShowHiddenSkillNotif] = useState(false);
+  const [hiddenSkillText, setHiddenSkillText] = useState('');
 
   // Helper to pick puppy emoji based on level
   const getPuppyEmoji = () => {
@@ -72,15 +75,27 @@ function App() {
   // Fetch puppy state from backend
   const fetchPuppy = async () => {
     setLoading(true);
+    const fullUrl = `${API_URL}/api/puppy`;
+    console.log('🔍 DEBUG: API_URL =', API_URL);
+    console.log('🔍 DEBUG: Full URL =', fullUrl);
+    console.log('🔍 DEBUG: window.location =', window.location.href);
+    
     try {
-      const res = await fetch(`${API_URL}/api/puppy`);
+      console.log('🔍 DEBUG: Starting fetch...');
+      const res = await fetch(fullUrl);
+      console.log('🔍 DEBUG: Response received =', res);
+      console.log('🔍 DEBUG: Response status =', res.status);
+      console.log('🔍 DEBUG: Response headers =', [...res.headers.entries()]);
+      
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
       const data = await res.json();
+      console.log('🔍 DEBUG: Data received =', data);
       setPuppy(data);
     } catch (error) {
-      console.error('Failed to fetch puppy:', error);
+      console.error('🔍 DEBUG: Error details =', error);
+      console.error('🔍 DEBUG: Error stack =', error.stack);
       setPuppy({ 
         name: 'Error', 
         happiness: 0, 
@@ -158,6 +173,11 @@ function App() {
       }
       const data = await res.json();
       setPuppy(data);
+      
+      // Show feedback message if action was blocked or has a message
+      if (data.message) {
+        alert(data.message);
+      }
     } catch (error) {
       console.error('Failed to perform action:', error);
       alert(`Failed to perform action: ${error.message}`);
@@ -181,6 +201,14 @@ function App() {
       }
       const data = await res.json();
       setPuppy(data.puppy || data); // fallback for old response
+      
+      // Handle hidden skills
+      if (data.newSkills && data.newSkills.length > 0) {
+        setHiddenSkillText(data.newSkills.join(', '));
+        setShowHiddenSkillNotif(true);
+        setTimeout(() => setShowHiddenSkillNotif(false), 4000);
+      }
+      
       setConversation((prev) => [
         ...prev,
         { from: 'user', text: userMessage },
@@ -243,19 +271,37 @@ function App() {
           </div>
           <div className="puppy-level">Level {puppy.level}</div>
           {showLevelUp && <div className="puppy-levelup">🎉 Level Up! 🎉</div>}
+          {showHiddenSkillNotif && (
+            <div className="puppy-hidden-skill-notif">
+              ✨ Hidden Skill Unlocked: {hiddenSkillText} ✨
+            </div>
+          )}
           <div className="puppy-timer">Puppy age: {timer}</div>
           <div className="puppy-stats">
             <ProgressBar label="Age" value={parseFloat(puppy.age)} max={10} color="#a3d977" />
             <ProgressBar label="Happiness" value={puppy.happiness} max={100} color="#ffe066" />
-            <ProgressBar label="Hunger" value={100 - puppy.hunger} max={100} color="#ff7675" />
+            <ProgressBar label="Energy" value={puppy.energy} max={100} color="#4caf50" />
             <ProgressBar label="Skills" value={puppy.skills.length} max={DOG_TRICKS.length} color="#b388ff" />
             <div className="skills-section">
               <div className="progress-bar-label">Skills</div>
               <div className="skills-badges">
                 {puppy.skills.length > 0 ? (
-                  puppy.skills.map((skill, idx) => (
-                    <span className="skill-badge" key={idx}>{skill}</span>
-                  ))
+                  puppy.skills.map((skill, idx) => {
+                    const isHidden = skill.includes('🎵') || skill.includes('🕺') || skill.includes('🎭') || 
+                                   skill.includes('🧠') || skill.includes('🦸') || skill.includes('🎨') || 
+                                   skill.includes('👑') || skill.includes('🚀') || skill.includes('🎪') || 
+                                   skill.includes('🧙') || skill.includes('💖') || skill.includes('🤖') || 
+                                   skill.includes('🏴‍☠️') || skill.includes('🥷') || skill.includes('🎯');
+                    return (
+                      <span 
+                        className={`skill-badge ${isHidden ? 'hidden-skill' : ''}`} 
+                        key={idx}
+                        title={isHidden ? 'Hidden Skill unlocked through chat!' : 'Regular skill'}
+                      >
+                        {skill}
+                      </span>
+                    );
+                  })
                 ) : (
                   <span className="skill-badge none">None yet!</span>
                 )}
@@ -263,10 +309,37 @@ function App() {
             </div>
           </div>
           <div className="puppy-actions">
-            <button onClick={() => handleAction('feed')} disabled={actionLoading}>🍖 Feed</button>
-            <button onClick={() => handleAction('play')} disabled={actionLoading}>🎾 Play</button>
-            <button onClick={() => handleAction('train')} disabled={actionLoading}>🧠 Train</button>
-            <button onClick={() => handleAction('talk')} disabled={actionLoading}>💬 Talk</button>
+            <button 
+              onClick={() => handleAction('feed')} 
+              disabled={actionLoading}
+              className={puppy.energy > 80 ? 'not-needed' : ''}
+              title={puppy.energy > 80 ? 'Not hungry right now' : 'Feed your puppy'}
+            >
+              🍖 Feed
+            </button>
+            <button 
+              onClick={() => handleAction('play')} 
+              disabled={actionLoading || puppy.energy <= 10}
+              className={puppy.energy <= 10 ? 'blocked' : ''}
+              title={puppy.energy <= 10 ? 'Too tired to play! Feed first.' : 'Play with your puppy'}
+            >
+              🎾 Play
+            </button>
+            <button 
+              onClick={() => handleAction('train')} 
+              disabled={actionLoading || puppy.energy <= 20}
+              className={puppy.energy <= 20 ? 'blocked' : ''}
+              title={puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 'Train your puppy'}
+            >
+              🧠 Train
+            </button>
+            <button 
+              onClick={() => handleAction('talk')} 
+              disabled={actionLoading}
+              title="Chat with your puppy"
+            >
+              💬 Talk
+            </button>
           </div>
           {actionLoading && <div>Interacting with puppy...</div>}
         </header>
