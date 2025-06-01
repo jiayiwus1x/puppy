@@ -132,11 +132,91 @@ const db = {
       if (result.rows.length === 0) return null;
       
       const row = result.rows[0];
+      
+      // Reconstruct breedInfo from breed ID
+      const DOG_BREEDS = {
+        'welshcorgi': {
+          name: 'Welsh Corgi',
+          description: 'Extra happiness from playing',
+          specialties: ['happiness'],
+          playHappinessBonus: 5,
+          image: 'welshcorgi'
+        },
+        'bordercollie': {
+          name: 'Border Collie', 
+          description: '+20% training success rate',
+          specialties: ['training'],
+          trainingBonus: 0.2,
+          image: 'bordercollie'
+        },
+        'sibhusky': {
+          name: 'Siberian Husky',
+          description: 'Uses less energy for activities',
+          specialties: ['energy'],
+          energyEfficiency: 0.3,
+          image: 'sibhusky'
+        },
+        'beagle': {
+          name: 'Beagle',
+          description: 'Better at finding hidden skills',
+          specialties: ['skills'],
+          hiddenSkillBonus: 0.5,
+          image: 'beagle'
+        },
+        'poodle': {
+          name: 'Poodle',
+          description: 'Learns skills faster',
+          specialties: ['learning'],
+          skillLearningBonus: 0.25,
+          image: 'poodle'
+        },
+        'shihtzu': {
+          name: 'Shih Tzu',
+          description: 'Slower hunger decay',
+          specialties: ['energy'],
+          hungerDecayReduction: 0.5,
+          image: 'shihtzu'
+        },
+        'labrador': {
+          name: 'Labrador',
+          description: 'Balanced and cheerful',
+          specialties: ['happiness', 'energy'],
+          playHappinessBonus: 3,
+          energyEfficiency: 0.15,
+          image: 'labrador'
+        },
+        'shiba': {
+          name: 'Shiba Inu',
+          description: 'Independent and resilient',
+          specialties: ['training'],
+          trainingBonus: 0.15,
+          hungerDecayReduction: 0.3,
+          image: 'shiba'
+        },
+        'chihuahua': {
+          name: 'Chihuahua',
+          description: 'High energy but needs more care',
+          specialties: ['happiness'],
+          playHappinessBonus: 7,
+          energyEfficiency: -0.2,
+          image: 'chihuahua'
+        },
+        'samoyed': {
+          name: 'Samoyed',
+          description: 'Naturally happy and energetic',
+          specialties: ['happiness', 'energy'],
+          playHappinessBonus: 4,
+          hungerDecayReduction: 0.4,
+          image: 'samoyed'
+        }
+      };
+      
       return {
         id: row.id,
         owner: row.owner_id,
         name: row.name,
         breed: row.breed,
+        breedInfo: DOG_BREEDS[row.breed] || DOG_BREEDS['labrador'],
         birthTime: parseInt(row.birth_time),
         happiness: row.happiness,
         energy: row.energy,
@@ -157,11 +237,91 @@ const db = {
     const client = await pool.connect();
     try {
       const result = await client.query('SELECT * FROM puppies WHERE in_community = TRUE ORDER BY last_active_time ASC');
+      
+      // Reconstruct breedInfo from breed ID
+      const DOG_BREEDS = {
+        'welshcorgi': {
+          name: 'Welsh Corgi',
+          description: 'Extra happiness from playing',
+          specialties: ['happiness'],
+          playHappinessBonus: 5,
+          image: 'welshcorgi'
+        },
+        'bordercollie': {
+          name: 'Border Collie', 
+          description: '+20% training success rate',
+          specialties: ['training'],
+          trainingBonus: 0.2,
+          image: 'bordercollie'
+        },
+        'sibhusky': {
+          name: 'Siberian Husky',
+          description: 'Uses less energy for activities',
+          specialties: ['energy'],
+          energyEfficiency: 0.3,
+          image: 'sibhusky'
+        },
+        'beagle': {
+          name: 'Beagle',
+          description: 'Better at finding hidden skills',
+          specialties: ['skills'],
+          hiddenSkillBonus: 0.5,
+          image: 'beagle'
+        },
+        'poodle': {
+          name: 'Poodle',
+          description: 'Learns skills faster',
+          specialties: ['learning'],
+          skillLearningBonus: 0.25,
+          image: 'poodle'
+        },
+        'shihtzu': {
+          name: 'Shih Tzu',
+          description: 'Slower hunger decay',
+          specialties: ['energy'],
+          hungerDecayReduction: 0.5,
+          image: 'shihtzu'
+        },
+        'labrador': {
+          name: 'Labrador',
+          description: 'Balanced and cheerful',
+          specialties: ['happiness', 'energy'],
+          playHappinessBonus: 3,
+          energyEfficiency: 0.15,
+          image: 'labrador'
+        },
+        'shiba': {
+          name: 'Shiba Inu',
+          description: 'Independent and resilient',
+          specialties: ['training'],
+          trainingBonus: 0.15,
+          hungerDecayReduction: 0.3,
+          image: 'shiba'
+        },
+        'chihuahua': {
+          name: 'Chihuahua',
+          description: 'High energy but needs more care',
+          specialties: ['happiness'],
+          playHappinessBonus: 7,
+          energyEfficiency: -0.2,
+          image: 'chihuahua'
+        },
+        'samoyed': {
+          name: 'Samoyed',
+          description: 'Naturally happy and energetic',
+          specialties: ['happiness', 'energy'],
+          playHappinessBonus: 4,
+          hungerDecayReduction: 0.4,
+          image: 'samoyed'
+        }
+      };
+      
       return result.rows.map(row => ({
         id: row.id,
         owner: row.owner_id,
         name: row.name,
         breed: row.breed,
+        breedInfo: DOG_BREEDS[row.breed] || DOG_BREEDS['labrador'],
         birthTime: parseInt(row.birth_time),
         happiness: row.happiness,
         energy: row.energy,

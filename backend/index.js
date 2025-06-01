@@ -586,11 +586,21 @@ app.get('/api/community/stats', async (req, res) => {
   res.json(stats);
 });
 
+// Get community leaderboards
+app.get('/api/community/leaderboards', async (req, res) => {
+  try {
+    const leaderboards = await getCommunityLeaderboards();
+    res.json(leaderboards);
+  } catch (error) {
+    console.error('Error fetching leaderboards:', error);
+    res.status(500).json({ error: 'Failed to fetch leaderboards' });
+  }
+});
+
 // Main action endpoint (feed, play, train, talk)
 app.post('/api/action', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  const { action, puppyId } = req.body;
-  const mode = req.query.mode || 'personal';
+  const { action, puppyId, mode = 'personal' } = req.body;
   const { userId } = await getUserSession(sessionId);
   
   let puppy;
@@ -635,68 +645,72 @@ app.post('/api/action', async (req, res) => {
   switch (action) {
     case 'feed':
       if (puppy.energy >= 100) {
-        return res.status(400).json({ error: `${puppy.name} is already full!` });
-      }
-      puppy.energy = Math.min(100, puppy.energy + 30);
-      puppy.happiness = Math.min(100, puppy.happiness + 10);
-      message = `You fed ${puppy.name}! 🍖`;
-      
-      if (Math.random() < 0.3) {
-        const newSkill = getRandomSkill(puppy.skills);
-        if (newSkill) {
-          puppy.skills.push(newSkill);
-          skillGained = true;
-          newSkills.push(newSkill);
-          message += ` ${puppy.name} learned ${newSkill}!`;
+        message = `${puppy.name} is already full and didn't eat much! 🥱 They're quite satisfied.`;
+      } else {
+        puppy.energy = Math.min(100, puppy.energy + 30);
+        puppy.happiness = Math.min(100, puppy.happiness + 10);
+        message = `You fed ${puppy.name}! 🍖`;
+        
+        if (Math.random() < 0.3) {
+          const newSkill = getRandomSkill(puppy.skills);
+          if (newSkill) {
+            puppy.skills.push(newSkill);
+            skillGained = true;
+            newSkills.push(newSkill);
+            message += ` ${puppy.name} learned ${newSkill}!`;
+          }
         }
       }
       break;
       
     case 'play':
       if (puppy.energy < 20) {
-        return res.status(400).json({ error: `${puppy.name} is too tired to play! Feed them first.` });
-      }
-      puppy.energy = Math.max(0, puppy.energy - 15);
-      puppy.happiness = Math.min(100, puppy.happiness + 20);
-      message = `You played with ${puppy.name}! 🎾`;
-      
-      if (Math.random() < 0.4) {
-        const newSkill = getRandomSkill(puppy.skills);
-        if (newSkill) {
-          puppy.skills.push(newSkill);
-          skillGained = true;
-          newSkills.push(newSkill);
-          message += ` ${puppy.name} learned ${newSkill} while playing!`;
+        message = `${puppy.name} is too tired to play! 😴 They need to eat something first to get energy.`;
+      } else {
+        puppy.energy = Math.max(0, puppy.energy - 15);
+        puppy.happiness = Math.min(100, puppy.happiness + 20);
+        message = `You played with ${puppy.name}! 🎾`;
+        
+        if (Math.random() < 0.4) {
+          const newSkill = getRandomSkill(puppy.skills);
+          if (newSkill) {
+            puppy.skills.push(newSkill);
+            skillGained = true;
+            newSkills.push(newSkill);
+            message += ` ${puppy.name} learned ${newSkill} while playing!`;
+          }
         }
       }
       break;
       
     case 'train':
       if (puppy.energy < 25) {
-        return res.status(400).json({ error: `${puppy.name} is too tired to train! Feed them first.` });
-      }
-      puppy.energy = Math.max(0, puppy.energy - 20);
-      puppy.happiness = Math.max(0, puppy.happiness - 5);
-      message = `You trained ${puppy.name}! 🎯`;
-      
-      if (Math.random() < 0.6) {
-        const newSkill = getRandomSkill(puppy.skills);
-        if (newSkill) {
-          puppy.skills.push(newSkill);
-          skillGained = true;
-          newSkills.push(newSkill);
-          message += ` ${puppy.name} mastered ${newSkill}!`;
+        message = `${puppy.name} is too tired to train! 😴 They need more energy before focusing on training.`;
+      } else {
+        puppy.energy = Math.max(0, puppy.energy - 20);
+        puppy.happiness = Math.max(0, puppy.happiness - 5);
+        message = `You trained ${puppy.name}! 🎯`;
+        
+        if (Math.random() < 0.6) {
+          const newSkill = getRandomSkill(puppy.skills);
+          if (newSkill) {
+            puppy.skills.push(newSkill);
+            skillGained = true;
+            newSkills.push(newSkill);
+            message += ` ${puppy.name} mastered ${newSkill}!`;
+          }
         }
       }
       break;
       
     case 'talk':
       if (puppy.energy < 5) {
-        return res.status(400).json({ error: `${puppy.name} is too tired to talk! Feed them first.` });
+        message = `${puppy.name} is too sleepy to talk! 😴 Maybe feed them first?`;
+      } else {
+        puppy.energy = Math.max(0, puppy.energy - 3);
+        puppy.happiness = Math.min(100, puppy.happiness + 5);
+        message = `You talked to ${puppy.name}! 💬`;
       }
-      puppy.energy = Math.max(0, puppy.energy - 3);
-      puppy.happiness = Math.min(100, puppy.happiness + 5);
-      message = `You talked to ${puppy.name}! 💬`;
       break;
       
     default:
@@ -797,7 +811,7 @@ app.post('/api/puppy/chat', async (req, res) => {
   
   res.json({
     response: responseMessage,
-    hiddenSkills: hiddenSkills,
+    discoveredSkills: hiddenSkills, // Frontend expects 'discoveredSkills' not 'hiddenSkills'
     puppy: {
       ...puppy,
       age: getPuppyAge(puppy)
@@ -814,4 +828,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Export the app for testing
-module.exports = app; 
+module.exports = app;

@@ -425,7 +425,7 @@ function App() {
         body: JSON.stringify({ message: userMessage, mode }),
       });
       
-      setPuppy(data);
+      setPuppy(data.puppy);
       
       if (data.discoveredSkills && data.discoveredSkills.length > 0) {
         console.log('Hidden skills discovered:', data.discoveredSkills);
@@ -436,9 +436,7 @@ function App() {
       
       const puppyResponse = { 
         sender: 'puppy', 
-        text: data.messages && data.messages.length > 0 ? 
-          data.messages[data.messages.length - 1] : 
-          `🐕 ${data.name} wags their tail!` 
+        text: data.response || `🐕 ${data.puppy.name} wags their tail!`
       };
       setConversation(prev => [...prev, puppyResponse]);
       
