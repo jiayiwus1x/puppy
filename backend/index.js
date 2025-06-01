@@ -119,6 +119,8 @@ const HIDDEN_SKILLS = [
 let puppies = new Map(); // userId -> puppy data
 let communityPuppies = new Map(); // puppyId -> puppy data  
 let sessions = new Map(); // sessionId -> userId
+let communityActivity = []; // Activity feed for community interactions
+let puppyPopularity = new Map(); // puppyId -> { views: number, interactions: number, adoptions: number }
 
 // Initialize with default community puppy
 const globalPuppy = {
@@ -139,6 +141,7 @@ const globalPuppy = {
   messages: [],
 };
 communityPuppies.set('global', globalPuppy);
+puppyPopularity.set('global', { views: 0, interactions: 0, adoptions: 0 });
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -282,6 +285,86 @@ function checkForHiddenSkills(message, puppy) {
   return newSkills.length > 0 ? newSkills : null;
 }
 
+// Community activity tracking
+function addCommunityActivity(type, puppyName, userName, details = '') {
+  const activity = {
+    id: generateId(),
+    type, // 'share', 'adopt', 'care', 'levelup', 'skill'
+    puppyName,
+    userName: userName || 'Anonymous',
+    details,
+    timestamp: Date.now()
+  };
+  
+  communityActivity.unshift(activity); // Add to beginning
+  
+  // Keep only last 50 activities
+  if (communityActivity.length > 50) {
+    communityActivity = communityActivity.slice(0, 50);
+  }
+}
+
+// Update puppy popularity
+function updatePopularity(puppyId, type) {
+  if (!puppyPopularity.has(puppyId)) {
+    puppyPopularity.set(puppyId, { views: 0, interactions: 0, adoptions: 0 });
+  }
+  
+  const stats = puppyPopularity.get(puppyId);
+  stats[type]++;
+  puppyPopularity.set(puppyId, stats);
+}
+
+// Get community leaderboards
+function getCommunityLeaderboards() {
+  const allPuppies = Array.from(communityPuppies.values());
+  
+  return {
+    highestLevel: allPuppies
+      .filter(p => !p.dead)
+      .sort((a, b) => b.level - a.level)
+      .slice(0, 10)
+      .map(p => ({ name: p.name, breed: p.breedInfo.name, level: p.level, age: getPuppyAge(p) })),
+      
+    mostSkilled: allPuppies
+      .filter(p => !p.dead)
+      .sort((a, b) => b.skills.length - a.skills.length)
+      .slice(0, 10)
+      .map(p => ({ name: p.name, breed: p.breedInfo.name, skills: p.skills.length, level: p.level })),
+      
+    oldest: allPuppies
+      .filter(p => !p.dead)
+      .sort((a, b) => a.birthTime - b.birthTime)
+      .slice(0, 10)
+      .map(p => ({ name: p.name, breed: p.breedInfo.name, age: getPuppyAge(p), level: p.level })),
+      
+    mostPopular: allPuppies
+      .filter(p => !p.dead)
+      .map(p => ({
+        name: p.name,
+        breed: p.breedInfo.name,
+        level: p.level,
+        popularity: puppyPopularity.get(p.id) || { views: 0, interactions: 0, adoptions: 0 }
+      }))
+      .sort((a, b) => (b.popularity.interactions + b.popularity.views) - (a.popularity.interactions + a.popularity.views))
+      .slice(0, 10)
+  };
+}
+
+// Helper to format time ago
+function getTimeAgo(timestamp) {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / (1000 * 60));
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
 // =============================================================================
 // ENDPOINTS
 // =============================================================================
@@ -330,7 +413,13 @@ app.get('/api/puppy', (req, res) => {
         });
       }
       
-      puppy = getUserPuppy(userId);
+      // No puppy found, need to create new one
+      return res.json({
+        sessionId: newSessionId,
+        userId: userId,
+        mode: mode,
+        needsNewPuppy: true
+      });
     }
   }
   
@@ -417,6 +506,10 @@ app.post('/api/puppy/share', (req, res) => {
   communityPuppies.set(puppy.id, puppy);
   puppies.delete(userId);
   
+  // Track activity and initialize popularity
+  addCommunityActivity('share', puppy.name, 'Someone', `shared their ${puppy.breedInfo.name} to the community`);
+  puppyPopularity.set(puppy.id, { views: 0, interactions: 0, adoptions: 0 });
+  
   res.json({ 
     message: `${puppy.name} has been shared with the community! Others can now help take care of them.`,
     success: true
@@ -445,6 +538,10 @@ app.post('/api/puppy/adopt', (req, res) => {
   puppies.set(userId, communityPuppy);
   communityPuppies.delete(puppyId);
   
+  // Track activity and popularity
+  addCommunityActivity('adopt', communityPuppy.name, 'Someone', `adopted ${communityPuppy.name} from the community`);
+  updatePopularity(puppyId, 'adoptions');
+  
   res.json({ 
     ...communityPuppy, 
     age: getPuppyAge(communityPuppy),
@@ -466,23 +563,77 @@ app.get('/api/community', (req, res) => {
       skills: puppy.skills.length,
       level: puppy.level,
       dead: puppy.dead,
-      lastActiveTime: puppy.lastActiveTime
+      lastActiveTime: puppy.lastActiveTime,
+      breed: puppy.breedInfo.name,
+      popularity: puppyPopularity.get(puppy.id) || { views: 0, interactions: 0, adoptions: 0 }
     }))
     .sort((a, b) => a.lastActiveTime - b.lastActiveTime);
     
   res.json(puppiesList);
 });
 
+// Get community leaderboards
+app.get('/api/community/leaderboards', (req, res) => {
+  const leaderboards = getCommunityLeaderboards();
+  res.json(leaderboards);
+});
+
+// Get community activity feed
+app.get('/api/community/activity', (req, res) => {
+  const limit = parseInt(req.query.limit) || 20;
+  const activities = communityActivity
+    .slice(0, limit)
+    .map(activity => ({
+      ...activity,
+      timeAgo: getTimeAgo(activity.timestamp)
+    }));
+  res.json(activities);
+});
+
+// Get community stats overview
+app.get('/api/community/stats', (req, res) => {
+  const allPuppies = Array.from(communityPuppies.values());
+  const alivePuppies = allPuppies.filter(p => !p.dead);
+  
+  const stats = {
+    totalPuppies: allPuppies.length,
+    alivePuppies: alivePuppies.length,
+    totalSkills: alivePuppies.reduce((sum, p) => sum + p.skills.length, 0),
+    averageLevel: alivePuppies.length > 0 ? 
+      (alivePuppies.reduce((sum, p) => sum + p.level, 0) / alivePuppies.length).toFixed(1) : 0,
+    breedDistribution: alivePuppies.reduce((acc, p) => {
+      acc[p.breedInfo.name] = (acc[p.breedInfo.name] || 0) + 1;
+      return acc;
+    }, {}),
+    recentActivity: communityActivity.length
+  };
+  
+  res.json(stats);
+});
+
 // Main action endpoint (feed, play, train, talk)
-app.post('/api/puppy/action', (req, res) => {
-  const { action, message } = req.body;
+app.post('/api/action', (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  const mode = req.query.mode || 'personal';
+  const { action, message: userMessage, mode, puppyId } = req.body;
   const { userId } = getUserSession(sessionId);
   
   let puppy;
   if (mode === 'community') {
-    puppy = getCommunityPuppy();
+    if (puppyId) {
+      // Care for specific community puppy
+      puppy = communityPuppies.get(puppyId);
+      if (!puppy) {
+        return res.status(404).json({ error: 'Community puppy not found' });
+      }
+    } else {
+      // Care for random community puppy (original behavior)
+      puppy = getCommunityPuppy();
+    }
+    // Track that someone viewed/interacted with this community puppy
+    updatePopularity(puppy.id, 'views');
+    if (action !== 'talk') {
+      updatePopularity(puppy.id, 'interactions');
+    }
   } else {
     puppy = getUserPuppy(userId);
   }
@@ -500,6 +651,7 @@ app.post('/api/puppy/action', (req, res) => {
   }
   
   const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
+  const oldLevel = puppy.level;
   
   if (action === 'train') {
     if (puppy.energy <= 20) {
@@ -628,20 +780,20 @@ app.post('/api/puppy/action', (req, res) => {
     let reply = "Woof! I love talking to you! 🐾";
     let newHiddenSkills = null;
     
-    if (message) {
-      newHiddenSkills = checkForHiddenSkills(message, puppy);
+    if (userMessage) {
+      newHiddenSkills = checkForHiddenSkills(userMessage, puppy);
       
       if (newHiddenSkills && newHiddenSkills.length > 0) {
         reply = `🎉 WOW! I just learned "${newHiddenSkills[0]}"! You're amazing! 🌟`;
       } else if (puppy.happiness >= 100) {
         reply = "✨ I'm so incredibly happy! I feel like I could learn anything! ✨ 🌈";
-      } else if (message.toLowerCase().includes('hello')) reply = "Woof woof! Hello! 🐶";
-      else if (message.toLowerCase().includes('hungry')) reply = "I could use a snack! 🍖";
-      else if (message.toLowerCase().includes('play')) reply = "Let's play fetch! 🎾";
-      else if (message.toLowerCase().includes('good')) reply = "You're a good human! 🥰";
-      else if (message.toLowerCase().includes('love')) reply = "I love you too! ❤️";
-      else if (message.toLowerCase().includes('trick')) reply = "Want to see my tricks? Try training me more! 🎪";
-      else if (message.toLowerCase().includes('secret')) reply = "Psst... try talking about different topics to unlock my hidden talents! 🤫";
+      } else if (userMessage.toLowerCase().includes('hello')) reply = "Woof woof! Hello! 🐶";
+      else if (userMessage.toLowerCase().includes('hungry')) reply = "I could use a snack! 🍖";
+      else if (userMessage.toLowerCase().includes('play')) reply = "Let's play fetch! 🎾";
+      else if (userMessage.toLowerCase().includes('good')) reply = "You're a good human! 🥰";
+      else if (userMessage.toLowerCase().includes('love')) reply = "I love you too! ❤️";
+      else if (userMessage.toLowerCase().includes('trick')) reply = "Want to see my tricks? Try training me more! 🎪";
+      else if (userMessage.toLowerCase().includes('secret')) reply = "Psst... try talking about different topics to unlock my hidden talents! 🤫";
     }
     
     updateLevel(puppy);
@@ -658,6 +810,19 @@ app.post('/api/puppy/action', (req, res) => {
   updateLevel(puppy);
   puppy.lastUpdateTime = Date.now();
   puppy.lastActiveTime = Date.now();
+  
+  // Track community activity for level ups and skill learning
+  if (mode === 'community') {
+    if (puppy.level > oldLevel) {
+      addCommunityActivity('levelup', puppy.name, 'Someone', `helped ${puppy.name} reach level ${puppy.level}!`);
+    }
+    if (action === 'train' && puppy.lastMessage && puppy.lastMessage.includes('learned')) {
+      addCommunityActivity('skill', puppy.name, 'Someone', `taught ${puppy.name} a new skill!`);
+    }
+    if (action !== 'talk') {
+      addCommunityActivity('care', puppy.name, 'Someone', `gave ${puppy.name} some ${action === 'feed' ? 'food' : action === 'play' ? 'playtime' : 'training'}`);
+    }
+  }
   
   const response = { ...puppy, age: getPuppyAge(puppy), actionBlocked: false, mode: mode };
   if (puppy.lastMessage) {
@@ -726,6 +891,12 @@ app.post('/api/puppy/chat', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
-}); 
+// Only start the server if not in test mode
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Backend server running on http://localhost:${PORT}`);
+  });
+}
+
+// Export the app for testing
+module.exports = app; 
