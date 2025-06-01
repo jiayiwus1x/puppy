@@ -11,7 +11,8 @@ const DOG_TRICKS = [
   'Heel', 'Find It', 'Ring Bell', 'Open Door'
 ];
 
-const API_URL = process.env.REACT_APP_API_URL;
+const FALLBACK_API_URL = 'https://puppy-backend-bce713c62e5e.herokuapp.com';
+const API_URL = process.env.REACT_APP_API_URL || FALLBACK_API_URL;
 
 // =============================================================================
 // COMPONENTS
@@ -62,6 +63,9 @@ function App() {
   const [hiddenSkillText, setHiddenSkillText] = useState('');
   const [showGameMessage, setShowGameMessage] = useState(false);
   const [gameMessageText, setGameMessageText] = useState('');
+  const [showDeathWarning, setShowDeathWarning] = useState(false);
+  const [showCriticalWarning, setShowCriticalWarning] = useState(false);
+  const [lastWarningEnergy, setLastWarningEnergy] = useState(100);
   
   // Dialog state
   const [userMessage, setUserMessage] = useState('');
@@ -135,6 +139,13 @@ function App() {
 
   const getMood = () => {
     if (!puppy) return { color: '#aaa', label: 'Unknown' };
+    
+    // Death warnings take priority
+    if (puppy.dead) return { color: '#ff0000', label: '💀 Dead' };
+    if (puppy.energy <= 5) return { color: '#ff0000', label: '🚨 Dying!' };
+    if (puppy.energy <= 15) return { color: '#ff4444', label: '⚠️ Critical' };
+    
+    // Normal mood based on happiness
     if (puppy.happiness > 80) return { color: '#4caf50', label: 'Satisfied' };
     if (puppy.happiness > 50) return { color: '#ffe066', label: 'Okay' };
     if (puppy.happiness > 30) return { color: '#ff9800', label: 'Unhappy' };
@@ -553,6 +564,45 @@ function App() {
     }
   }, [puppy, lastSkill]);
 
+  // Monitor puppy energy for death warnings
+  useEffect(() => {
+    if (!puppy || mode === 'community') return;
+    
+    const energy = puppy.energy || 0;
+    
+    // Death notification
+    if (puppy.dead && !showDeathWarning) {
+      setGameMessageText(`💀 ${puppy.name} has died! Feed them to revive. RIP little buddy... 😢`);
+      setShowGameMessage(true);
+      setTimeout(() => setShowGameMessage(false), 10000);
+      setLastWarningEnergy(0);
+      return;
+    }
+    
+    // Death warning (energy ≤ 5)
+    if (energy <= 5 && energy > 0 && lastWarningEnergy > 5) {
+      setShowDeathWarning(true);
+      setGameMessageText(`🚨 URGENT: ${puppy.name} is about to die! Feed immediately! (Energy: ${energy})`);
+      setShowGameMessage(true);
+      setTimeout(() => {
+        setShowDeathWarning(false);
+        setShowGameMessage(false);
+      }, 8000);
+    }
+    // Critical warning (energy ≤ 15)
+    else if (energy <= 15 && energy > 5 && lastWarningEnergy > 15) {
+      setShowCriticalWarning(true);
+      setGameMessageText(`⚠️ WARNING: ${puppy.name} is getting very hungry! (Energy: ${energy})`);
+      setShowGameMessage(true);
+      setTimeout(() => {
+        setShowCriticalWarning(false);
+        setShowGameMessage(false);
+      }, 5000);
+    }
+    
+    setLastWarningEnergy(energy);
+  }, [puppy?.energy, puppy?.dead, lastWarningEnergy, puppy?.name, mode, showDeathWarning]);
+
   // =============================================================================
   // RENDER
   // =============================================================================
@@ -584,9 +634,14 @@ function App() {
           </div>
           
           <div className="puppy-emoji-mood-row">
-            <div className={`puppy-emoji-container ${showSkillAnim ? 'skill-anim' : ''}`} style={{ fontSize: '5rem', transition: 'all 0.2s' }}>
+            <div className={`puppy-emoji-container ${showSkillAnim ? 'skill-anim' : ''} ${puppy?.energy <= 15 && !puppy?.dead ? 'critical-condition' : ''} ${puppy?.energy <= 5 && !puppy?.dead ? 'dying-condition' : ''}`} style={{ fontSize: '5rem', transition: 'all 0.2s' }}>
               {showSkillAnim && lastSkill && (
                 <div className="puppy-skill-anim">{lastSkill}!</div>
+              )}
+              {puppy?.energy <= 15 && !puppy?.dead && (
+                <div className="puppy-warning-indicator">
+                  {puppy.energy <= 5 ? '🚨' : '⚠️'}
+                </div>
               )}
               <span className="puppy-emoji-base">{getPuppyDisplay()}</span>
             </div>
@@ -634,7 +689,7 @@ function App() {
             </div>
           )}
           {showGameMessage && (
-            <div className="puppy-game-message-notif">
+            <div className={`puppy-game-message-notif ${showDeathWarning ? 'death-warning' : showCriticalWarning ? 'critical-warning' : ''}`}>
               {gameMessageText}
             </div>
           )}
@@ -702,7 +757,18 @@ function App() {
               <div className="progress-bar-value">{(parseFloat(puppy?.age || 0) / 365).toFixed(2)} / 10.00 years</div>
             </div>
             <ProgressBar label="Happiness" value={puppy?.happiness || 0} max={100} color="#ffe066" />
-            <ProgressBar label="Energy" value={puppy?.energy || 0} max={100} color="#4caf50" />
+            <ProgressBar 
+              label="Energy" 
+              value={puppy?.energy || 0} 
+              max={100} 
+              color={
+                !puppy ? "#4caf50" :
+                puppy.energy <= 5 ? "#ff0000" :
+                puppy.energy <= 15 ? "#ff4444" :
+                puppy.energy <= 30 ? "#ff9800" :
+                "#4caf50"
+              } 
+            />
             <ProgressBar label="Skills" value={puppy?.skills?.length || 0} max={DOG_TRICKS.length} color="#b388ff" />
             <div className="skills-section">
               <div className="progress-bar-label">Skills</div>

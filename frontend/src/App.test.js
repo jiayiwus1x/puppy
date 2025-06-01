@@ -423,4 +423,80 @@ describe('App Component', () => {
       expect(screen.getByText('Friendly dog')).toBeInTheDocument();
     });
   });
+
+  test('shows critical warning when puppy energy is low', async () => {
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ breeds: [] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: 'Critical Puppy',
+          happiness: 50,
+          energy: 10, // Critical energy level
+          skills: [],
+          level: 1,
+          age: '1.0'
+        })
+      });
+
+    render(<App />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('⚠️ Critical')).toBeInTheDocument();
+    });
+  });
+
+  test('shows death warning when puppy energy is extremely low', async () => {
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ breeds: [] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: 'Dying Puppy',
+          happiness: 50,
+          energy: 3, // Near-death energy level
+          skills: [],
+          level: 1,
+          age: '1.0'
+        })
+      });
+
+    render(<App />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('🚨 Dying!')).toBeInTheDocument();
+    });
+  });
+
+  test('shows dead status when puppy has died', async () => {
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ breeds: [] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: 'Dead Puppy',
+          happiness: 0,
+          energy: 0,
+          skills: [],
+          level: 1,
+          age: '1.0',
+          dead: true
+        })
+      });
+
+    render(<App />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('💀 Dead')).toBeInTheDocument();
+    });
+  });
 });

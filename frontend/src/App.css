@@ -1209,3 +1209,83 @@
   background: white;
   border-radius: 8px;
 }
+
+/* Warning animations for death notifications */
+.puppy-game-message-notif.death-warning {
+  background: linear-gradient(45deg, #ff0000, #cc0000, #ff3333);
+  color: white;
+  font-weight: bold;
+  border: 3px solid #ff4444;
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+  animation: deathPulse 0.8s infinite alternate;
+  font-size: 1.1em;
+}
+
+.puppy-game-message-notif.critical-warning {
+  background: linear-gradient(45deg, #ff6600, #ff8800, #ffaa00);
+  color: white;
+  font-weight: bold;
+  border: 2px solid #ff9900;
+  box-shadow: 0 0 15px rgba(255, 153, 0, 0.4);
+  animation: criticalPulse 1.2s infinite alternate;
+}
+
+@keyframes deathPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+  }
+  100% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+  }
+}
+
+@keyframes criticalPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 15px rgba(255, 153, 0, 0.4);
+  }
+  100% {
+    transform: scale(1.02);
+    box-shadow: 0 0 25px rgba(255, 153, 0, 0.6);
+  }
+}
+
+/* Puppy critical condition effects */
+.puppy-emoji-container.critical-condition {
+  filter: sepia(0.3) hue-rotate(20deg);
+  animation: criticalShake 2s infinite;
+}
+
+.puppy-emoji-container.dying-condition {
+  filter: sepia(0.8) hue-rotate(340deg) brightness(0.8);
+  animation: dyingShake 1s infinite;
+}
+
+.puppy-warning-indicator {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 1.5rem;
+  animation: warningBlink 0.8s infinite;
+  z-index: 10;
+}
+
+@keyframes criticalShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+@keyframes dyingShake {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  25% { transform: translateX(-3px) translateY(-1px); }
+  50% { transform: translateX(2px) translateY(1px); }
+  75% { transform: translateX(-1px) translateY(-2px); }
+}
+
+@keyframes warningBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
