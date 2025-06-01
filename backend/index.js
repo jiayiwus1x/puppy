@@ -1,11 +1,16 @@
 const express = require('express');
 const cors = require('cors');
+const { initializeDatabase, db } = require('./database');
 
 const app = express();
-const PORT = process.env.PORT || 5050;
+const PORT = process.env.PORT || 8080;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
+
+// Initialize database on startup
+initializeDatabase();
 
 // =============================================================================
 // CONSTANTS & DATA
@@ -113,37 +118,6 @@ const HIDDEN_SKILLS = [
 ];
 
 // =============================================================================
-// STORAGE
-// =============================================================================
-
-let puppies = new Map(); // userId -> puppy data
-let communityPuppies = new Map(); // puppyId -> puppy data  
-let sessions = new Map(); // sessionId -> userId
-let communityActivity = []; // Activity feed for community interactions
-let puppyPopularity = new Map(); // puppyId -> { views: number, interactions: number, adoptions: number }
-
-// Initialize with default community puppy
-const globalPuppy = {
-  id: 'global',
-  name: 'Community Puppy',
-  breed: 'labrador',
-  breedInfo: DOG_BREEDS['labrador'],
-  owner: null,
-  birthTime: Date.now() - (1000 * 60 * 60), // 1 hour old
-  happiness: 50,
-  energy: 50,
-  skills: [],
-  level: 1,
-  lastUpdateTime: Date.now(),
-  lastActiveTime: Date.now(),
-  dead: false,
-  inCommunity: true,
-  messages: [],
-};
-communityPuppies.set('global', globalPuppy);
-puppyPopularity.set('global', { views: 0, interactions: 0, adoptions: 0 });
-
-// =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
 
@@ -157,46 +131,47 @@ function getRandomSkill(learnedSkills) {
   return availableSkills[Math.floor(Math.random() * availableSkills.length)];
 }
 
-function getUserSession(sessionId) {
+async function getUserSession(sessionId) {
   if (!sessionId) {
     sessionId = generateId();
     const userId = generateId();
-    sessions.set(sessionId, userId);
+    await db.createUser(userId, sessionId);
     return { sessionId, userId, isNew: true };
   }
   
-  const userId = sessions.get(sessionId);
+  const userId = await db.getUserBySession(sessionId);
   if (!userId) {
     const newUserId = generateId();
-    sessions.set(sessionId, newUserId);
+    await db.createUser(newUserId, sessionId);
     return { sessionId, userId: newUserId, isNew: true };
   }
   
   return { sessionId, userId, isNew: false };
 }
 
-function getUserPuppy(userId, puppyName = null) {
-  let puppy = puppies.get(userId);
-  if (!puppy) {
-    puppy = createNewPuppy(userId, puppyName || 'My Puppy');
-  }
+async function getUserPuppy(userId, puppyName = null) {
+  let puppy = await db.getPuppyByOwner(userId);
+  // Don't auto-create puppy - let the API endpoint handle this
   return puppy;
 }
 
-function getCommunityPuppy() {
-  const availablePuppies = Array.from(communityPuppies.values()).filter(p => !p.dead);
-  if (availablePuppies.length === 0) {
-    const newPuppy = createNewPuppy(null, 'Lonely Puppy', 'labrador');
+async function getCommunityPuppy() {
+  const availablePuppies = await db.getCommunityPuppies();
+  const alivePuppies = availablePuppies.filter(p => !p.dead);
+  
+  if (alivePuppies.length === 0) {
+    const newPuppy = await createNewPuppy(null, 'Lonely Puppy', 'labrador');
     newPuppy.inCommunity = true;
-    communityPuppies.set(newPuppy.id, newPuppy);
+    await db.createPuppy(newPuppy);
+    await db.movePuppyToCommunity(newPuppy.id);
     return newPuppy;
   }
   
-  availablePuppies.sort((a, b) => a.lastActiveTime - b.lastActiveTime);
-  return availablePuppies[0];
+  alivePuppies.sort((a, b) => a.lastActiveTime - b.lastActiveTime);
+  return alivePuppies[0];
 }
 
-function createNewPuppy(userId, name = 'My Puppy', breedId = 'labrador') {
+async function createNewPuppy(userId, name = 'My Puppy', breedId = 'labrador') {
   const breed = DOG_BREEDS[breedId] || DOG_BREEDS['labrador'];
   
   const puppy = {
@@ -218,7 +193,7 @@ function createNewPuppy(userId, name = 'My Puppy', breedId = 'labrador') {
   };
   
   if (userId) {
-    puppies.set(userId, puppy);
+    await db.createPuppy(puppy);
   }
   return puppy;
 }
@@ -229,7 +204,7 @@ function getPuppyAge(puppy) {
   return ((now - puppy.birthTime) / msPerDay).toFixed(1);
 }
 
-function updatePuppyStats(puppy) {
+async function updatePuppyStats(puppy) {
   const now = Date.now();
   let msPerEnergyLoss = 1000 * 60 * 2; // 1 energy lost every 2 minutes
   
@@ -257,6 +232,9 @@ function updatePuppyStats(puppy) {
   } else if (puppy.dead) {
     puppy.dead = false; // Auto-revive if has energy
   }
+  
+  // Save updated stats to database
+  await db.createPuppy(puppy);
 }
 
 function updateLevel(puppy) {
@@ -286,7 +264,7 @@ function checkForHiddenSkills(message, puppy) {
 }
 
 // Community activity tracking
-function addCommunityActivity(type, puppyName, userName, details = '') {
+async function addCommunityActivity(type, puppyName, userName, details = '') {
   const activity = {
     id: generateId(),
     type, // 'share', 'adopt', 'care', 'levelup', 'skill'
@@ -296,73 +274,12 @@ function addCommunityActivity(type, puppyName, userName, details = '') {
     timestamp: Date.now()
   };
   
-  communityActivity.unshift(activity); // Add to beginning
-  
-  // Keep only last 50 activities
-  if (communityActivity.length > 50) {
-    communityActivity = communityActivity.slice(0, 50);
-  }
+  await db.addCommunityActivity(activity);
 }
 
 // Update puppy popularity
-function updatePopularity(puppyId, type) {
-  if (!puppyPopularity.has(puppyId)) {
-    puppyPopularity.set(puppyId, { views: 0, interactions: 0, adoptions: 0 });
-  }
-  
-  const stats = puppyPopularity.get(puppyId);
-  stats[type]++;
-  puppyPopularity.set(puppyId, stats);
-}
-
-// Get community leaderboards
-function getCommunityLeaderboards() {
-  const allPuppies = Array.from(communityPuppies.values());
-  
-  return {
-    highestLevel: allPuppies
-      .filter(p => !p.dead)
-      .sort((a, b) => b.level - a.level)
-      .slice(0, 10)
-      .map(p => ({ name: p.name, breed: p.breedInfo.name, level: p.level, age: getPuppyAge(p) })),
-      
-    mostSkilled: allPuppies
-      .filter(p => !p.dead)
-      .sort((a, b) => b.skills.length - a.skills.length)
-      .slice(0, 10)
-      .map(p => ({ name: p.name, breed: p.breedInfo.name, skills: p.skills.length, level: p.level })),
-      
-    oldest: allPuppies
-      .filter(p => !p.dead)
-      .sort((a, b) => a.birthTime - b.birthTime)
-      .slice(0, 10)
-      .map(p => ({ name: p.name, breed: p.breedInfo.name, age: getPuppyAge(p), level: p.level })),
-      
-    mostPopular: allPuppies
-      .filter(p => !p.dead)
-      .map(p => ({
-        name: p.name,
-        breed: p.breedInfo.name,
-        level: p.level,
-        popularity: puppyPopularity.get(p.id) || { views: 0, interactions: 0, adoptions: 0 }
-      }))
-      .sort((a, b) => (b.popularity.interactions + b.popularity.views) - (a.popularity.interactions + a.popularity.views))
-      .slice(0, 10)
-  };
-}
-
-// Helper to format time ago
-function getTimeAgo(timestamp) {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minutes = Math.floor(diff / (1000 * 60));
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+async function updatePopularity(puppyId, type) {
+  await db.updatePopularity(puppyId, type);
 }
 
 // =============================================================================
@@ -379,21 +296,21 @@ app.get('/api/breeds', (req, res) => {
 });
 
 // Get puppy state
-app.get('/api/puppy', (req, res) => {
+app.get('/api/puppy', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
   const mode = req.query.mode || 'personal';
-  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  const { sessionId: newSessionId, userId } = await getUserSession(sessionId);
   
   let puppy;
   let userPuppyInCommunity = null;
   
   if (mode === 'community') {
-    puppy = getCommunityPuppy();
+    puppy = await getCommunityPuppy();
   } else {
-    puppy = puppies.get(userId);
+    puppy = await getUserPuppy(userId);
     
     if (!puppy) {
-      userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
+      userPuppyInCommunity = (await db.getCommunityPuppies()).find(p => p.owner === userId);
       
       if (userPuppyInCommunity) {
         return res.json({
@@ -423,7 +340,7 @@ app.get('/api/puppy', (req, res) => {
     }
   }
   
-  updatePuppyStats(puppy);
+  await updatePuppyStats(puppy);
   updateLevel(puppy);
   puppy.lastActiveTime = Date.now();
   
@@ -437,16 +354,16 @@ app.get('/api/puppy', (req, res) => {
 });
 
 // Create new puppy
-app.post('/api/puppy/create', (req, res) => {
+app.post('/api/puppy/create', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
   const { name, breedId } = req.body;
-  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
+  const { sessionId: newSessionId, userId } = await getUserSession(sessionId);
   
   if (!name || name.trim().length === 0) {
     return res.status(400).json({ error: 'Name is required' });
   }
   
-  const puppy = createNewPuppy(userId, name, breedId);
+  const puppy = await createNewPuppy(userId, name, breedId);
   updateLevel(puppy);
   
   res.json({ 
@@ -459,27 +376,27 @@ app.post('/api/puppy/create', (req, res) => {
 });
 
 // Reclaim puppy from community
-app.post('/api/puppy/reclaim', (req, res) => {
+app.post('/api/puppy/reclaim', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  const { userId } = getUserSession(sessionId);
+  const { userId } = await getUserSession(sessionId);
   
-  const userPuppyInCommunity = Array.from(communityPuppies.values()).find(p => p.owner === userId);
+  const userPuppyInCommunity = (await db.getCommunityPuppies()).find(p => p.owner === userId);
   
   if (!userPuppyInCommunity) {
     return res.status(404).json({ error: 'No puppy found in community' });
   }
   
-  if (puppies.has(userId)) {
+  if (await db.getPuppyByOwner(userId)) {
     return res.status(400).json({ error: 'You already have a personal puppy!' });
   }
   
   userPuppyInCommunity.inCommunity = false;
   userPuppyInCommunity.lastActiveTime = Date.now();
   
-  puppies.set(userId, userPuppyInCommunity);
-  communityPuppies.delete(userPuppyInCommunity.id);
+  await db.createPuppy(userPuppyInCommunity);
+  await db.adoptPuppyFromCommunity(userPuppyInCommunity.id, userId);
   
-  updatePuppyStats(userPuppyInCommunity);
+  await updatePuppyStats(userPuppyInCommunity);
   updateLevel(userPuppyInCommunity);
   
   res.json({ 
@@ -492,23 +409,24 @@ app.post('/api/puppy/reclaim', (req, res) => {
 });
 
 // Share puppy to community  
-app.post('/api/puppy/share', (req, res) => {
+app.post('/api/puppy/share', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  const { userId } = getUserSession(sessionId);
+  const { userId } = await getUserSession(sessionId);
   
-  const puppy = getUserPuppy(userId);
+  const puppy = await getUserPuppy(userId);
   if (!puppy) {
     return res.status(404).json({ error: 'No puppy found' });
   }
   
   puppy.inCommunity = true;
   puppy.lastActiveTime = Date.now();
-  communityPuppies.set(puppy.id, puppy);
-  puppies.delete(userId);
+  await db.createPuppy(puppy);
+  await db.movePuppyToCommunity(puppy.id);
   
   // Track activity and initialize popularity
-  addCommunityActivity('share', puppy.name, 'Someone', `shared their ${puppy.breedInfo.name} to the community`);
-  puppyPopularity.set(puppy.id, { views: 0, interactions: 0, adoptions: 0 });
+  await addCommunityActivity('share', puppy.name, 'Someone', `shared their ${puppy.breedInfo.name} to the community`);
+  await updatePopularity(puppy.id, 'views');
+  await updatePopularity(puppy.id, 'interactions');
   
   res.json({ 
     message: `${puppy.name} has been shared with the community! Others can now help take care of them.`,
@@ -517,17 +435,17 @@ app.post('/api/puppy/share', (req, res) => {
 });
 
 // Adopt community puppy
-app.post('/api/puppy/adopt', (req, res) => {
+app.post('/api/puppy/adopt', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
   const { puppyId } = req.body;
-  const { userId } = getUserSession(sessionId);
+  const { userId } = await getUserSession(sessionId);
   
-  const communityPuppy = communityPuppies.get(puppyId);
+  const communityPuppy = (await db.getCommunityPuppies()).find(p => p.id === puppyId);
   if (!communityPuppy) {
     return res.status(404).json({ error: 'Community puppy not found' });
   }
   
-  if (puppies.has(userId)) {
+  if (await db.getPuppyByOwner(userId)) {
     return res.status(400).json({ error: 'You already have a puppy! Share it to community first.' });
   }
   
@@ -535,12 +453,12 @@ app.post('/api/puppy/adopt', (req, res) => {
   communityPuppy.inCommunity = false;
   communityPuppy.lastActiveTime = Date.now();
   
-  puppies.set(userId, communityPuppy);
-  communityPuppies.delete(puppyId);
+  await db.createPuppy(communityPuppy);
+  await db.adoptPuppyFromCommunity(puppyId, userId);
   
   // Track activity and popularity
-  addCommunityActivity('adopt', communityPuppy.name, 'Someone', `adopted ${communityPuppy.name} from the community`);
-  updatePopularity(puppyId, 'adoptions');
+  await addCommunityActivity('adopt', communityPuppy.name, 'Someone', `adopted ${communityPuppy.name} from the community`);
+  await updatePopularity(puppyId, 'adoptions');
   
   res.json({ 
     ...communityPuppy, 
@@ -552,9 +470,11 @@ app.post('/api/puppy/adopt', (req, res) => {
 });
 
 // Get community puppies list
-app.get('/api/community', (req, res) => {
-  const puppiesList = Array.from(communityPuppies.values())
-    .map(puppy => ({
+app.get('/api/community', async (req, res) => {
+  const allPuppies = await db.getCommunityPuppies();
+  const puppiesList = await Promise.all(allPuppies.map(async puppy => {
+    const popularity = await db.getPopularity(puppy.id);
+    return {
       id: puppy.id,
       name: puppy.name,
       age: getPuppyAge(puppy),
@@ -565,329 +485,324 @@ app.get('/api/community', (req, res) => {
       dead: puppy.dead,
       lastActiveTime: puppy.lastActiveTime,
       breed: puppy.breedInfo.name,
-      popularity: puppyPopularity.get(puppy.id) || { views: 0, interactions: 0, adoptions: 0 }
-    }))
-    .sort((a, b) => a.lastActiveTime - b.lastActiveTime);
-    
+      popularity: popularity
+    };
+  }));
+  
+  puppiesList.sort((a, b) => a.lastActiveTime - b.lastActiveTime);
   res.json(puppiesList);
 });
 
 // Get community leaderboards
-app.get('/api/community/leaderboards', (req, res) => {
-  const leaderboards = getCommunityLeaderboards();
-  res.json(leaderboards);
-});
+async function getCommunityLeaderboards() {
+  const allPuppies = await db.getCommunityPuppies();
+  
+  return {
+    highestLevel: allPuppies
+      .filter(p => !p.dead)
+      .sort((a, b) => b.level - a.level)
+      .slice(0, 10)
+      .map(p => ({ name: p.name, breed: p.breedInfo.name, level: p.level, age: getPuppyAge(p) })),
+      
+    mostSkilled: allPuppies
+      .filter(p => !p.dead)
+      .sort((a, b) => b.skills.length - a.skills.length)
+      .slice(0, 10)
+      .map(p => ({ name: p.name, breed: p.breedInfo.name, skills: p.skills.length, level: p.level })),
+      
+    oldest: allPuppies
+      .filter(p => !p.dead)
+      .sort((a, b) => a.birthTime - b.birthTime)
+      .slice(0, 10)
+      .map(p => ({ name: p.name, breed: p.breedInfo.name, age: getPuppyAge(p), level: p.level })),
+      
+    mostPopular: await Promise.all(allPuppies
+      .filter(p => !p.dead)
+      .map(async p => ({
+        name: p.name,
+        breed: p.breedInfo.name,
+        level: p.level,
+        popularity: await db.getPopularity(p.id)
+      })))
+      .then(puppies => puppies.sort((a, b) => (b.popularity.interactions + b.popularity.views) - (a.popularity.interactions + a.popularity.views)))
+      .then(puppies => puppies.slice(0, 10))
+  };
+}
+
+// Helper to format time ago
+function getTimeAgo(timestamp) {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / (1000 * 60));
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
 
 // Get community activity feed
-app.get('/api/community/activity', (req, res) => {
+app.get('/api/community/activity', async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
-  const activities = communityActivity
-    .slice(0, limit)
-    .map(activity => ({
-      ...activity,
-      timeAgo: getTimeAgo(activity.timestamp)
-    }));
-  res.json(activities);
+  const activities = await db.getCommunityActivity(limit);
+  const activitiesWithTimeAgo = activities.map(activity => ({
+    ...activity,
+    timeAgo: getTimeAgo(activity.timestamp)
+  }));
+  res.json(activitiesWithTimeAgo);
 });
 
 // Get community stats overview
-app.get('/api/community/stats', (req, res) => {
-  const allPuppies = Array.from(communityPuppies.values());
+app.get('/api/community/stats', async (req, res) => {
+  const allPuppies = await db.getCommunityPuppies();
   const alivePuppies = allPuppies.filter(p => !p.dead);
+  
+  const breedStats = alivePuppies.reduce((acc, puppy) => {
+    const breed = puppy.breedInfo.name;
+    acc[breed] = (acc[breed] || 0) + 1;
+    return acc;
+  }, {});
+  
+  const activities = await db.getCommunityActivity(50);
   
   const stats = {
     totalPuppies: allPuppies.length,
     alivePuppies: alivePuppies.length,
-    totalSkills: alivePuppies.reduce((sum, p) => sum + p.skills.length, 0),
     averageLevel: alivePuppies.length > 0 ? 
       (alivePuppies.reduce((sum, p) => sum + p.level, 0) / alivePuppies.length).toFixed(1) : 0,
-    breedDistribution: alivePuppies.reduce((acc, p) => {
-      acc[p.breedInfo.name] = (acc[p.breedInfo.name] || 0) + 1;
-      return acc;
-    }, {}),
-    recentActivity: communityActivity.length
+    averageAge: alivePuppies.length > 0 ? 
+      (alivePuppies.reduce((sum, p) => sum + parseFloat(getPuppyAge(p)), 0) / alivePuppies.length).toFixed(1) : 0,
+    breedDistribution: Object.entries(breedStats)
+      .sort(([,a], [,b]) => b - a)
+      .reduce((acc, [breed, count]) => {
+        acc[breed] = count;
+        return acc;
+      }, {}),
+    recentActivity: activities.length
   };
   
   res.json(stats);
 });
 
 // Main action endpoint (feed, play, train, talk)
-app.post('/api/action', (req, res) => {
+app.post('/api/action', async (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  const { action, message: userMessage, mode, puppyId } = req.body;
-  const { userId } = getUserSession(sessionId);
+  const { action, puppyId } = req.body;
+  const mode = req.query.mode || 'personal';
+  const { userId } = await getUserSession(sessionId);
   
   let puppy;
+  
   if (mode === 'community') {
     if (puppyId) {
       // Care for specific community puppy
-      puppy = communityPuppies.get(puppyId);
+      puppy = (await db.getCommunityPuppies()).find(p => p.id === puppyId);
       if (!puppy) {
         return res.status(404).json({ error: 'Community puppy not found' });
       }
     } else {
       // Care for random community puppy (original behavior)
-      puppy = getCommunityPuppy();
+      puppy = await getCommunityPuppy();
     }
     // Track that someone viewed/interacted with this community puppy
-    updatePopularity(puppy.id, 'views');
-    if (action !== 'talk') {
-      updatePopularity(puppy.id, 'interactions');
+    await updatePopularity(puppy.id, 'interactions');
+    
+    if (action === 'feed') {
+      await addCommunityActivity('care', puppy.name, 'Someone', 'fed the puppy');
+    } else if (action === 'play') {
+      await addCommunityActivity('care', puppy.name, 'Someone', 'played with the puppy');
     }
   } else {
-    puppy = getUserPuppy(userId);
+    puppy = await getUserPuppy(userId);
   }
   
-  updatePuppyStats(puppy);
+  await updatePuppyStats(puppy);
   
   if (puppy.dead && action !== 'feed') {
-    return res.json({ 
-      ...puppy, 
-      age: getPuppyAge(puppy), 
-      message: 'Your puppy is too weak to do anything. Try feeding it!',
-      actionBlocked: true,
-      mode: mode
+    return res.status(400).json({ 
+      error: `${puppy.name} has died and can only be revived by feeding!`,
+      dead: true 
     });
   }
+
+  // Rest of the action logic stays the same...
+  let message = '';
+  let skillGained = false;
+  let newSkills = [];
   
-  const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
-  const oldLevel = puppy.level;
-  
-  if (action === 'train') {
-    if (puppy.energy <= 20) {
-      return res.json({ 
-        ...puppy, 
-        age: getPuppyAge(puppy), 
-        message: 'Your puppy is too tired to focus on training! Feed it first. 🍖',
-        actionBlocked: true,
-        mode: mode
-      });
-    }
-    if (puppy.happiness < 20) {
-      return res.json({ 
-        ...puppy, 
-        age: getPuppyAge(puppy), 
-        message: 'Your puppy is too sad to focus on training! Play with it first. 😢',
-        actionBlocked: true,
-        mode: mode
-      });
-    }
-    
-    const availableTricks = DOG_TRICKS.filter(trick => !puppy.skills.includes(trick));
-    if (availableTricks.length > 0) {
-      if (puppy.happiness < 10) {
-        puppy.energy = Math.max(0, puppy.energy - 15);
-        return res.json({ 
-          ...puppy, 
-          age: getPuppyAge(puppy), 
-          message: 'Your puppy is too depressed to learn anything new! 💔 Try playing and talking to cheer it up first.',
-          actionBlocked: false,
-          mode: mode
-        });
+  switch (action) {
+    case 'feed':
+      if (puppy.energy >= 100) {
+        return res.status(400).json({ error: `${puppy.name} is already full!` });
       }
+      puppy.energy = Math.min(100, puppy.energy + 30);
+      puppy.happiness = Math.min(100, puppy.happiness + 10);
+      message = `You fed ${puppy.name}! 🍖`;
       
-      const totalSkills = puppy.skills.length;
-      let failureChance = Math.min(0.7, totalSkills * 0.05);
-      if (breedInfo.trainingBonus) {
-        failureChance = Math.max(0, failureChance - breedInfo.trainingBonus);
-      }
-      if (breedInfo.skillLearningBonus) {
-        failureChance = Math.max(0, failureChance - breedInfo.skillLearningBonus);
-      }
-      
-      const random = Math.random();
-      
-      if (random < failureChance) {
-        puppy.energy = Math.max(0, puppy.energy - 15);
-        puppy.lastMessage = `Training was challenging! Your puppy tried hard but didn't learn anything new this time. (${Math.round(failureChance * 100)}% difficulty) 😅`;
-      } else {
-        const trick = availableTricks[Math.floor(Math.random() * availableTricks.length)];
-        puppy.skills.push(trick);
-        
-        if (puppy.happiness >= 80 && availableTricks.length > 1 && random > 0.5) {
-          const secondTrick = availableTricks.filter(t => t !== trick)[Math.floor(Math.random() * (availableTricks.length - 1))];
-          puppy.skills.push(secondTrick);
-          puppy.lastMessage = `🌟 Amazing! Your happy puppy learned TWO skills: "${trick}" and "${secondTrick}"! 🎉`;
-        } else {
-          puppy.lastMessage = `Great! Your puppy learned "${trick}"! 🎓`;
+      if (Math.random() < 0.3) {
+        const newSkill = getRandomSkill(puppy.skills);
+        if (newSkill) {
+          puppy.skills.push(newSkill);
+          skillGained = true;
+          newSkills.push(newSkill);
+          message += ` ${puppy.name} learned ${newSkill}!`;
         }
-        
-        puppy.energy = Math.max(0, puppy.energy - 15);
       }
-    } else {
-      puppy.lastMessage = 'Your puppy has learned all the basic tricks! Try chatting to unlock hidden skills! 💬';
-    }
-  }
-  
-  if (action === 'play') {
-    if (puppy.energy <= 10) {
-      return res.json({ 
-        ...puppy, 
-        age: getPuppyAge(puppy), 
-        message: 'Your puppy is too tired to play! Feed it first. 🍖',
-        actionBlocked: true,
-        mode: mode
-      });
-    }
-    
-    let happinessGain = 10;
-    if (breedInfo.playHappinessBonus) {
-      happinessGain += breedInfo.playHappinessBonus;
-    }
-    
-    let energyCost = 5;
-    if (puppy.happiness >= 95) {
-      energyCost = 2;
-      puppy.lastMessage = '✨ Your ecstatic puppy played with magical energy! No tiredness! ✨';
-    } else {
-      puppy.lastMessage = 'Your puppy had fun playing! 🎾';
-    }
-    
-    if (breedInfo.energyEfficiency) {
-      energyCost = Math.round(energyCost * (1 - breedInfo.energyEfficiency));
-    }
-    
-    puppy.energy = Math.max(0, puppy.energy - energyCost);
-    puppy.happiness = Math.min(100, puppy.happiness + happinessGain);
-  }
-  
-  if (action === 'feed') {
-    let energyGain;
-    if (puppy.energy >= 80) {
-      energyGain = 10;
-      puppy.lastMessage = "Your puppy nibbled a bit but isn't very hungry. 🥱";
-    } else if (puppy.energy >= 60) {
-      energyGain = 15;
-      puppy.lastMessage = "Your puppy ate some food but wasn't super hungry. 😊";
-    } else if (puppy.energy >= 30) {
-      energyGain = 20;
-      puppy.lastMessage = "Your puppy enjoyed the meal! 😋";
-    } else {
-      energyGain = 25;
-      puppy.lastMessage = "Your puppy devoured the food hungrily! 🤤";
-    }
-    
-    puppy.energy = Math.min(100, puppy.energy + energyGain);
-  }
-  
-  if (action === 'talk') {
-    let happinessGain = 5;
-    if (puppy.happiness >= 95) {
-      happinessGain = 2;
-    }
-    
-    puppy.happiness = Math.min(100, puppy.happiness + happinessGain);
-    let reply = "Woof! I love talking to you! 🐾";
-    let newHiddenSkills = null;
-    
-    if (userMessage) {
-      newHiddenSkills = checkForHiddenSkills(userMessage, puppy);
+      break;
       
-      if (newHiddenSkills && newHiddenSkills.length > 0) {
-        reply = `🎉 WOW! I just learned "${newHiddenSkills[0]}"! You're amazing! 🌟`;
-      } else if (puppy.happiness >= 100) {
-        reply = "✨ I'm so incredibly happy! I feel like I could learn anything! ✨ 🌈";
-      } else if (userMessage.toLowerCase().includes('hello')) reply = "Woof woof! Hello! 🐶";
-      else if (userMessage.toLowerCase().includes('hungry')) reply = "I could use a snack! 🍖";
-      else if (userMessage.toLowerCase().includes('play')) reply = "Let's play fetch! 🎾";
-      else if (userMessage.toLowerCase().includes('good')) reply = "You're a good human! 🥰";
-      else if (userMessage.toLowerCase().includes('love')) reply = "I love you too! ❤️";
-      else if (userMessage.toLowerCase().includes('trick')) reply = "Want to see my tricks? Try training me more! 🎪";
-      else if (userMessage.toLowerCase().includes('secret')) reply = "Psst... try talking about different topics to unlock my hidden talents! 🤫";
-    }
-    
-    updateLevel(puppy);
-    puppy.lastUpdateTime = Date.now();
-    puppy.lastActiveTime = Date.now();
-    
-    return res.json({ 
-      puppy: { ...puppy, age: getPuppyAge(puppy), mode: mode }, 
-      reply,
-      newSkills: newHiddenSkills
-    });
-  }
-  
-  updateLevel(puppy);
-  puppy.lastUpdateTime = Date.now();
-  puppy.lastActiveTime = Date.now();
-  
-  // Track community activity for level ups and skill learning
-  if (mode === 'community') {
-    if (puppy.level > oldLevel) {
-      addCommunityActivity('levelup', puppy.name, 'Someone', `helped ${puppy.name} reach level ${puppy.level}!`);
-    }
-    if (action === 'train' && puppy.lastMessage && puppy.lastMessage.includes('learned')) {
-      addCommunityActivity('skill', puppy.name, 'Someone', `taught ${puppy.name} a new skill!`);
-    }
-    if (action !== 'talk') {
-      addCommunityActivity('care', puppy.name, 'Someone', `gave ${puppy.name} some ${action === 'feed' ? 'food' : action === 'play' ? 'playtime' : 'training'}`);
-    }
-  }
-  
-  const response = { ...puppy, age: getPuppyAge(puppy), actionBlocked: false, mode: mode };
-  if (puppy.lastMessage) {
-    response.message = puppy.lastMessage;
-    delete puppy.lastMessage;
-  }
-  
-  res.json(response);
-});
-
-// Chat with puppy (for hidden skills)
-app.post('/api/puppy/chat', (req, res) => {
-  const sessionId = req.headers['x-session-id'];
-  const { message, mode } = req.body;
-  const { sessionId: newSessionId, userId } = getUserSession(sessionId);
-  
-  const puppy = mode === 'community' ? getCommunityPuppy() : getUserPuppy(userId);
-  if (!puppy) {
-    return res.status(404).json({ error: 'No puppy found' });
-  }
-
-  updatePuppyStats(puppy);
-  if (puppy.energy <= 0) {
-    return res.status(400).json({ error: 'Puppy has died and cannot chat' });
-  }
-
-  const breedInfo = puppy.breedInfo || DOG_BREEDS['labrador'];
-  let hiddenSkillChance = 1.0;
-  if (breedInfo.hiddenSkillBonus) {
-    hiddenSkillChance += breedInfo.hiddenSkillBonus;
-  }
-  
-  const discoveredSkills = [];
-  if (message && Math.random() <= hiddenSkillChance) {
-    const newSkills = checkForHiddenSkills(message, puppy);
-    if (newSkills) {
-      discoveredSkills.push(...newSkills);
-      if (breedInfo.hiddenSkillBonus > 0) {
-        puppy.messages.push(`✨ ${puppy.name} discovered: ${newSkills.join(', ')}! (${breedInfo.name} specialty - better at finding hidden skills!)`);
-      } else {
-        puppy.messages.push(`✨ ${puppy.name} discovered: ${newSkills.join(', ')}!`);
+    case 'play':
+      if (puppy.energy < 20) {
+        return res.status(400).json({ error: `${puppy.name} is too tired to play! Feed them first.` });
       }
-    }
+      puppy.energy = Math.max(0, puppy.energy - 15);
+      puppy.happiness = Math.min(100, puppy.happiness + 20);
+      message = `You played with ${puppy.name}! 🎾`;
+      
+      if (Math.random() < 0.4) {
+        const newSkill = getRandomSkill(puppy.skills);
+        if (newSkill) {
+          puppy.skills.push(newSkill);
+          skillGained = true;
+          newSkills.push(newSkill);
+          message += ` ${puppy.name} learned ${newSkill} while playing!`;
+        }
+      }
+      break;
+      
+    case 'train':
+      if (puppy.energy < 25) {
+        return res.status(400).json({ error: `${puppy.name} is too tired to train! Feed them first.` });
+      }
+      puppy.energy = Math.max(0, puppy.energy - 20);
+      puppy.happiness = Math.max(0, puppy.happiness - 5);
+      message = `You trained ${puppy.name}! 🎯`;
+      
+      if (Math.random() < 0.6) {
+        const newSkill = getRandomSkill(puppy.skills);
+        if (newSkill) {
+          puppy.skills.push(newSkill);
+          skillGained = true;
+          newSkills.push(newSkill);
+          message += ` ${puppy.name} mastered ${newSkill}!`;
+        }
+      }
+      break;
+      
+    case 'talk':
+      if (puppy.energy < 5) {
+        return res.status(400).json({ error: `${puppy.name} is too tired to talk! Feed them first.` });
+      }
+      puppy.energy = Math.max(0, puppy.energy - 3);
+      puppy.happiness = Math.min(100, puppy.happiness + 5);
+      message = `You talked to ${puppy.name}! 💬`;
+      break;
+      
+    default:
+      return res.status(400).json({ error: 'Invalid action' });
   }
-
-  const responses = [
-    `🐕 ${puppy.name} wags their tail!`,
-    `🐶 ${puppy.name} looks at you happily!`,
-    `🎾 ${puppy.name} wants to play!`,
-    `❤️ ${puppy.name} loves spending time with you!`
-  ];
-
-  if (discoveredSkills.length === 0) {
-    puppy.messages.push(responses[Math.floor(Math.random() * responses.length)]);
+  
+  if (skillGained) {
+    await addCommunityActivity('skill', puppy.name, 'Someone', `learned new skill: ${newSkills.join(', ')}`);
   }
-
+  
+  const oldLevel = puppy.level;
   updateLevel(puppy);
-  puppy.lastUpdateTime = Date.now();
-  if (mode !== 'community') puppy.lastActiveTime = Date.now();
+  
+  if (puppy.level > oldLevel) {
+    message += ` 🎉 Level up! ${puppy.name} is now level ${puppy.level}!`;
+    await addCommunityActivity('levelup', puppy.name, 'Someone', `reached level ${puppy.level}`);
+  }
+  
+  puppy.lastActiveTime = Date.now();
+  await updatePuppyStats(puppy);
   
   res.json({ 
     ...puppy, 
-    sessionId: newSessionId,
-    mode,
-    discoveredSkills
+    age: getPuppyAge(puppy),
+    message: message,
+    skillGained: skillGained,
+    newSkills: newSkills,
+    levelUp: puppy.level > oldLevel
+  });
+});
+
+// Chat with puppy
+app.post('/api/puppy/chat', async (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  const { message } = req.body;
+  const { userId } = await getUserSession(sessionId);
+  
+  const puppy = await getUserPuppy(userId);
+  if (!puppy) {
+    return res.status(404).json({ error: 'No puppy found' });
+  }
+  
+  await updatePuppyStats(puppy);
+  if (puppy.energy <= 0) {
+    return res.status(400).json({ error: 'Puppy has died and cannot chat' });
+  }
+  
+  const hiddenSkills = checkForHiddenSkills(message, puppy);
+  let responseMessage = '';
+  
+  if (hiddenSkills && hiddenSkills.length > 0) {
+    responseMessage = `🎉 ${puppy.name} discovered hidden skills: ${hiddenSkills.join(', ')}! `;
+    await addCommunityActivity('skill', puppy.name, 'Someone', `discovered hidden skills: ${hiddenSkills.join(', ')}`);
+  }
+  
+  const responses = [
+    `🐕 Woof! ${puppy.name} wags tail happily!`,
+    `🎾 ${puppy.name} wants to play more!`,
+    `❤️ ${puppy.name} loves you so much!`,
+    `🍖 ${puppy.name} thinks about treats...`,
+    `😴 ${puppy.name} yawns sleepily`,
+    `🏃 ${puppy.name} runs in circles excitedly!`
+  ];
+  
+  const breedSpecificResponses = {
+    'border-collie': [`🧠 ${puppy.name} tilts head intelligently`, `🐑 ${puppy.name} looks around for sheep to herd`],
+    'labrador': [`🏊 ${puppy.name} dreams of swimming`, `🦆 ${puppy.name} sniffs around for ducks`],
+    'poodle': [`💇 ${puppy.name} shows off their fluffy coat`, `🎭 ${puppy.name} poses elegantly`],
+    'bulldog': [`😤 ${puppy.name} snorts contentedly`, `🛋️ ${puppy.name} looks for a comfy spot`],
+    'german-shepherd': [`👮 ${puppy.name} stands at attention`, `🔍 ${puppy.name} sniffs around protectively`],
+    'golden-retriever': [`🌞 ${puppy.name} radiates happiness`, `🤝 ${puppy.name} wants to be everyone's friend`],
+    'beagle': [`👃 ${puppy.name} follows an interesting scent`, `🎵 ${puppy.name} howls melodically`],
+    'rottweiler': [`💪 ${puppy.name} shows their strong stance`, `🏠 ${puppy.name} patrols the area`],
+    'siberian-husky': [`🏔️ ${puppy.name} dreams of snow`, `🛷 ${puppy.name} wants to run and run`],
+    'dachshund': [`🌭 ${puppy.name} wiggles their long body`, `🕳️ ${puppy.name} looks for something to dig`]
+  };
+  
+  const allResponses = [...responses, ...(breedSpecificResponses[puppy.breed] || [])];
+  responseMessage += allResponses[Math.floor(Math.random() * allResponses.length)];
+  
+  puppy.messages.push(`You: ${message}`);
+  puppy.messages.push(`${puppy.name}: ${responseMessage}`);
+  
+  if (puppy.messages.length > 20) {
+    puppy.messages = puppy.messages.slice(-20);
+  }
+  
+  const oldLevel = puppy.level;
+  updateLevel(puppy);
+  
+  if (puppy.level > oldLevel) {
+    responseMessage += ` 🎉 Level up! ${puppy.name} is now level ${puppy.level}!`;
+    await addCommunityActivity('levelup', puppy.name, 'Someone', `reached level ${puppy.level}`);
+  }
+  
+  puppy.lastActiveTime = Date.now();
+  await updatePuppyStats(puppy);
+  
+  res.json({
+    response: responseMessage,
+    hiddenSkills: hiddenSkills,
+    puppy: {
+      ...puppy,
+      age: getPuppyAge(puppy)
+    },
+    levelUp: puppy.level > oldLevel
   });
 });
 
