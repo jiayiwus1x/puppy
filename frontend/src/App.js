@@ -98,13 +98,20 @@ function App() {
             alt={`${puppy.breedInfo.name} (Level ${puppy.level})`}
             className="puppy-image"
             onError={(e) => {
-              if (imageVariant > 1) {
-                const fallbackImage = `/dogs/${puppy.breedInfo.image}1.png`;
+              // Try previous image variants before falling back to emoji
+              const currentSrc = e.target.src;
+              const currentVariant = parseInt(currentSrc.match(/(\d+)\.png$/)?.[1] || '1');
+              
+              if (currentVariant > 1) {
+                // Try the previous variant
+                const fallbackImage = `/dogs/${puppy.breedInfo.image}${currentVariant - 1}.png`;
                 if (e.target.src !== fallbackImage) {
                   e.target.src = fallbackImage;
                   return;
                 }
               }
+              
+              // All image variants failed, show emoji fallback
               e.target.style.display = 'none';
               e.target.nextSibling.style.display = 'inline';
             }}
@@ -440,25 +447,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header */}
-      <header className="app-header">
-        <h1>🐾 Virtual Puppy</h1>
-        <div className="mode-selector">
-          <button 
-            className={mode === 'personal' ? 'active' : ''} 
-            onClick={() => switchMode('personal')}
-          >
-            My Puppy
-          </button>
-          <button 
-            className={mode === 'community' ? 'active' : ''} 
-            onClick={() => switchMode('community')}
-          >
-            Community
-          </button>
-        </div>
-      </header>
-      
       <div className="puppy-card">
         <header className="App-header">
           <h1>🐶 Raise Your LLM Puppy!</h1>
@@ -486,56 +474,14 @@ function App() {
               )}
               <span className="puppy-emoji-base">{getPuppyDisplay()}</span>
             </div>
-            <div className="puppy-mood-bar">
-              <div className="puppy-mood-label">{getMood().label}</div>
-              <div className="puppy-mood-outer">
-                <div className="puppy-mood-inner" style={{ width: `${puppy.happiness}%`, background: getMood().color }} />
-              </div>
-              <div className="puppy-mood-value">{puppy.happiness} / 100</div>
-            </div>
           </div>
           
-          {/* Action Buttons - Moved right below the puppy image */}
-          <div className="puppy-actions">
-            <button 
-              onClick={() => handleAction('feed')} 
-              disabled={actionLoading}
-              className={puppy.energy > 90 ? 'not-needed' : puppy.energy > 70 ? 'less-effective' : ''}
-              title={
-                puppy.energy > 90 ? 'Already full!' : 
-                puppy.energy > 70 ? 'Not very hungry (less effective)' : 
-                'Feed your puppy'
-              }
-            >
-              🍖 Feed
-            </button>
-            <button 
-              onClick={() => handleAction('play')} 
-              disabled={actionLoading || puppy.energy <= 10}
-              className={puppy.energy <= 10 ? 'blocked' : ''}
-              title={puppy.energy <= 10 ? 'Too tired to play! Feed first.' : 'Play with your puppy'}
-            >
-              🎾 Play
-            </button>
-            <button 
-              onClick={() => handleAction('train')} 
-              disabled={actionLoading || puppy.energy <= 20 || puppy.happiness < 20}
-              className={puppy.energy <= 20 || puppy.happiness < 20 ? 'blocked' : ''}
-              title={
-                puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 
-                puppy.happiness < 20 ? 'Too sad to focus! Play or talk first.' :
-                'Train your puppy'
-              }
-            >
-              🧠 Train
-            </button>
-            <button 
-              onClick={() => handleAction('talk')} 
-              disabled={actionLoading}
-              title="Chat with your puppy"
-            >
-              💬 Talk
-            </button>
+          <div className="puppy-mood-bar">
+            <div className="puppy-mood-label">{getMood().label}</div>
+            <div className="puppy-mood-outer">
+              <div className="puppy-mood-inner" style={{ width: `${puppy.happiness}%`, background: getMood().color }} />
+            </div>
+            <div className="puppy-mood-value">{puppy.happiness} / 100</div>
           </div>
           
           {/* Puppy Name */}
@@ -582,6 +528,50 @@ function App() {
             </div>
           )}
           <div className="puppy-timer">Puppy age: {timer}</div>
+          
+          {/* Action Buttons - Below the age timer */}
+          <div className="puppy-actions">
+            <button 
+              onClick={() => handleAction('feed')} 
+              disabled={actionLoading}
+              className={puppy.energy > 90 ? 'not-needed' : puppy.energy > 70 ? 'less-effective' : ''}
+              title={
+                puppy.energy > 90 ? 'Already full!' : 
+                puppy.energy > 70 ? 'Not very hungry (less effective)' : 
+                'Feed your puppy'
+              }
+            >
+              🍖 Feed
+            </button>
+            <button 
+              onClick={() => handleAction('play')} 
+              disabled={actionLoading || puppy.energy <= 10}
+              className={puppy.energy <= 10 ? 'blocked' : ''}
+              title={puppy.energy <= 10 ? 'Too tired to play! Feed first.' : 'Play with your puppy'}
+            >
+              🎾 Play
+            </button>
+            <button 
+              onClick={() => handleAction('train')} 
+              disabled={actionLoading || puppy.energy <= 20 || puppy.happiness < 20}
+              className={puppy.energy <= 20 || puppy.happiness < 20 ? 'blocked' : ''}
+              title={
+                puppy.energy <= 20 ? 'Too tired to focus! Feed first.' : 
+                puppy.happiness < 20 ? 'Too sad to focus! Play or talk first.' :
+                'Train your puppy'
+              }
+            >
+              🧠 Train
+            </button>
+            <button 
+              onClick={() => handleAction('talk')} 
+              disabled={actionLoading}
+              title="Chat with your puppy"
+            >
+              💬 Talk
+            </button>
+          </div>
+          
           <div className="puppy-stats">
             {/* Custom Age Progress Bar with years as unit */}
             <div className="progress-bar-container">
